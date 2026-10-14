@@ -1,0 +1,19 @@
+# HTTPS for DOMAIN (Let's Encrypt, renewed by Caddy) and the three services behind it.
+{$DOMAIN} {
+	encode gzip
+	# The federation node: hubs read the signed manifest here and invoke esim.quote / esim.status.
+	handle /.well-known/ai-market.json {
+		reverse_proxy node:9090
+	}
+	handle /ai-market/* {
+		reverse_proxy node:9090
+	}
+	# The seller node for agents: /agents/quote, /agents/status, /agents/order (x402).
+	handle_path /agents/* {
+		reverse_proxy rails:9490
+	}
+	# Everything else is the storefront.
+	handle {
+		reverse_proxy store:9495
+	}
+}

@@ -1,0 +1,77 @@
+# The eSIM operator kit: your storefront for people, your seller node for AI agents, the federation
+# node that makes it findable, and Caddy for HTTPS — on one domain.
+#
+#   https://DOMAIN/                          the storefront (store/)
+#   https://DOMAIN/agents/…                  the seller node: /quote, /status, /order over x402 (rails/)
+#   https://DOMAIN/.well-known/ai-market.json and /ai-market/*   aimarket node (node/)
+#
+# Setup in docs/operator-guide.md. In short: cp .env.example .env, put the keys in secrets/,
+# docker compose up -d --build, then write node.toml and start the node service.
+services:
+  store:
+    build: { context: ., dockerfile: store/Dockerfile }
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      PUBLIC_URL: https://${DOMAIN}
+      DATA_DIR: /data
+      KIT_URL: https://github.com/alexar76/esim-operator-kit
+      ESIMACCESS_ACCESS_CODE_FILE: /run/secrets/esim/esimaccess_access_code
+      ESIMACCESS_SECRET_KEY_FILE: /run/secrets/esim/esimaccess_secret_key
+      CDP_KEY_FILE: /run/secrets/esim/cdp_api_key.json
+      TONAPI_KEY_FILE: /run/secrets/esim/tonapi_key
+      TRONGRID_KEY_FILE: /run/secrets/esim/trongrid_key
+      STRIPE_SECRET_KEY_FILE: /run/secrets/esim/stripe_secret_key
+      STRIPE_WEBHOOK_SECRET_FILE: /run/secrets/esim/stripe_webhook_secret
+    volumes:
+      - ./secrets:/run/secrets/esim:ro
+      - ./data/store:/data
+    read_only: true
+    tmpfs: [/tmp]
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+
+  rails:
+    build: { context: ./rails }
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      PUBLIC_URL: https://${DOMAIN}/agents
+      PAY_TO: ${PAY_TO_EVM}
+      SELLER_NAME: ${STORE_NAME}
+      PRODUCT_ID: ${PRODUCT_ID}
+      ESIMACCESS_ACCESS_CODE_FILE: /run/secrets/esim/esimaccess_access_code
+      ESIMACCESS_SECRET_KEY_FILE: /run/secrets/esim/esimaccess_secret_key
+      CDP_KEY_FILE: /run/secrets/esim/cdp_api_key.json
+      STATUS_SECRET_FILE: /data/status_secret
+      PROVIDER_KEY_FILE: /data/provider_ed25519.pem
+      ORDER_STORE: /data/orders.json
+    volumes:
+      - ./secrets:/run/secrets/esim:ro
+      - ./data/rails:/data
+    read_only: true
+    tmpfs: [/tmp]
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+
+  node:
+    build: { context: ./node }
+    restart: unless-stopped
+    profiles: [federation]           # started once node.toml exists: docker compose --profile federation up -d
+    volumes:
+      - ./node.toml:/node/node.toml:ro
+      - ./data/node:/node/data       # the node's signing key is its identity: back it up
+    read_only: true
+    tmpfs: [/tmp]
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+
+  caddy:
+    image: caddy:2.8.4-alpine
+    restart: unless-stopped
+    ports: ["80:80", "443:443"]
+    environment:
+      DOMAIN: ${DOMAIN}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./data/caddy:/data

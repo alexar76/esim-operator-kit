@@ -1,0 +1,25 @@
+{
+  "name": "esim-rails",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Open eSIM rails for the AIMarket hub: a seller node that quotes, sells and tracks travel data eSIMs from its own wholesale account (eSIM Access first), paid per order over x402.",
+  "type": "module",
+  "license": "MIT",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "test": "node --test \"test/**/*.test.js\"",
+    "start": "node src/server.js",
+    "catalog": "node scripts/catalog.mjs"
+  },
+  "dependencies": {
+    "@coinbase/cdp-sdk": "1.57.1",
+    "@x402/core": "2.28.0",
+    "@x402/evm": "2.28.0",
+    "@x402/express": "2.28.0",
+    "@x402/extensions": "2.28.0",
+    "@x402/svm": "2.28.0",
+    "express": "^5.1.0"
+  }
+}
