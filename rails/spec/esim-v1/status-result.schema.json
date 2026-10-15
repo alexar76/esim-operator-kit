@@ -1,0 +1,59 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/alexar76/esim-operator-kit/blob/main/rails/spec/esim-v1/status-result.schema.json",
+  "title": "esim.status@v1 result",
+  "type": "object",
+  "required": [
+    "esim_tran_no",
+    "state",
+    "installed",
+    "data_used_bytes",
+    "activation_code",
+    "status_token"
+  ],
+  "properties": {
+    "esim_tran_no": {
+      "type": "string"
+    },
+    "state": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "installed": {
+      "type": "boolean"
+    },
+    "data_used_bytes": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "data_total_bytes": {
+      "type": [
+        "integer",
+        "null"
+      ]
+    },
+    "activated": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "expires": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "activation_code": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "status_token": {
+      "type": "string"
+    }
+  }
+}

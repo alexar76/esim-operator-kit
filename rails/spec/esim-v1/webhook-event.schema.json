@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/alexar76/esim-operator-kit/blob/main/rails/spec/esim-v1/webhook-event.schema.json",
+  "title": "An event for the operator's own systems (WEBHOOK_URL)",
+  "type": "object",
+  "required": [
+    "id",
+    "type",
+    "created_at",
+    "data"
+  ],
+  "properties": {
+    "id": {
+      "type": "string",
+      "description": "dedupe on this: delivery is at least once"
+    },
+    "type": {
+      "enum": [
+        "order.created",
+        "order.awaiting_payment",
+        "order.delivered",
+        "order.refund_due",
+        "order.underpaid",
+        "order.expired",
+        "agent_order.delivered",
+        "agent_order.cancelled"
+      ]
+    },
+    "created_at": {
+      "type": "string"
+    },
+    "data": {
+      "type": "object"
+    }
+  }
+}

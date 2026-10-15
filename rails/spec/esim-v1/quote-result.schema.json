@@ -1,0 +1,59 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/alexar76/esim-operator-kit/blob/main/rails/spec/esim-v1/quote-result.schema.json",
+  "title": "esim.quote@v1 result (inside {success: true, result})",
+  "type": "object",
+  "required": [
+    "seller",
+    "offers",
+    "order"
+  ],
+  "properties": {
+    "seller": {
+      "type": "object",
+      "required": [
+        "name",
+        "product_id"
+      ],
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "product_id": {
+          "type": "string"
+        },
+        "demo": {
+          "type": "boolean"
+        }
+      }
+    },
+    "offers": {
+      "type": "array",
+      "items": {
+        "$ref": "offer.schema.json"
+      }
+    },
+    "order": {
+      "type": "object",
+      "required": [
+        "url",
+        "method"
+      ],
+      "properties": {
+        "url": {
+          "type": "string",
+          "pattern": "^https?://"
+        },
+        "method": {
+          "const": "POST"
+        },
+        "payment": {
+          "type": "string"
+        }
+      }
+    },
+    "catalogue_at": {
+      "type": "string"
+    }
+  }
+}

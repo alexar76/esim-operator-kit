@@ -1,0 +1,79 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/alexar76/esim-operator-kit/blob/main/rails/spec/esim-v1/supplier-profile.schema.json",
+  "title": "A profile from the operator's own system (HTTP supplier GET /profiles → {profiles: [Profile]})",
+  "type": "object",
+  "required": [
+    "profile_id",
+    "order_ref",
+    "activation_code"
+  ],
+  "properties": {
+    "profile_id": {
+      "type": "string",
+      "pattern": "^[0-9A-Za-z_-]{6,64}$"
+    },
+    "order_ref": {
+      "type": "string"
+    },
+    "activation_code": {
+      "type": "string",
+      "pattern": "^LPA:1\\$"
+    },
+    "iccid": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "qr_code_url": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "install_url": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "apn": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "expires": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "state": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "installed": {
+      "type": "boolean"
+    },
+    "data_used_bytes": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "data_total_bytes": {
+      "type": [
+        "integer",
+        "null"
+      ]
+    },
+    "activated": {
+      "type": [
+        "string",
+        "null"
+      ]
+    }
+  }
+}

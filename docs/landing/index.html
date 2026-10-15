@@ -1,0 +1,454 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>eSIM operator kit — sell travel eSIMs to people and AI agents</title>
+<meta name="description" content="Open-source eSIM operator kit on AIMarket rails: a storefront in five languages taking USDT, USDC and TON on ten networks, a seller node AI agents buy from over x402, and the federation node that lists you on AIMarket hubs." />
+<meta property="og:title" content="eSIM operator kit — run your own eSIM operator" />
+<meta property="og:description" content="Sell travel data eSIMs to people and AI agents from your own wholesale account. Buyers pay straight into your wallets on ten networks; agents buy over x402." />
+<meta property="og:image" content="https://esim.modelmarket.dev/screenshots/hero.jpg" />
+<meta property="og:type" content="website" />
+<meta name="twitter:card" content="summary_large_image" />
+<meta name="theme-color" content="#04070d" />
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='16' fill='%230b6e4f'/%3E%3Ccircle cx='32' cy='32' r='15' fill='none' stroke='%23fff' stroke-width='5'/%3E%3Ccircle cx='32' cy='32' r='5' fill='%23fff'/%3E%3C/svg%3E" />
+<meta name="color-scheme" content="light dark" />
+<script src="theme.js"></script>
+<style>
+  :root{
+    color-scheme:light;
+    --bg:#f5f3ec; --bg2:#eeeee5; --ink:#17312b; --muted:#5b7065; --line:#d3dcd0;
+    --brand:#285e48; --brand2:#587e65; --gold:#96712f; --glass:#fffefaeb; --card:#fffefa;
+    --surface:#e8ede3; --code:#eaf0e5; --code-ink:#244c3a;
+    --radius:20px; --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  }
+  :root[data-theme="dark"]{
+    color-scheme:dark;
+    --bg:#101b19; --bg2:#14221e; --ink:#f0efe5; --muted:#a7b9af; --line:#32433c;
+    --brand:#bed9bb; --brand2:#90b7a2; --gold:#d8c49b; --glass:#182724eb; --card:#182724;
+    --surface:#20312a; --code:#0d1814; --code-ink:#d3e3d1;
+  }
+  @media(prefers-color-scheme:dark){:root:not([data-theme]){color-scheme:dark;--bg:#101b19;--bg2:#14221e;--ink:#f0efe5;--muted:#a7b9af;--line:#32433c;--brand:#bed9bb;--brand2:#90b7a2;--gold:#d8c49b;--glass:#182724eb;--card:#182724;--surface:#20312a;--code:#0d1814;--code-ink:#d3e3d1}}
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.6 ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,"PingFang SC","Noto Sans",sans-serif;-webkit-font-smoothing:antialiased}
+  a{color:var(--brand);text-decoration:none}
+  a:hover{text-decoration:underline}
+  .wrap{max-width:1180px;margin:0 auto;padding:0 20px}
+
+  /* nav */
+  .nav{position:fixed;top:0;left:0;right:0;z-index:20;display:flex;align-items:center;justify-content:space-between;gap:12px;
+       padding:14px 22px;background:linear-gradient(180deg,rgba(4,7,13,.88),rgba(4,7,13,0));}
+  .logo{display:flex;align-items:center;gap:10px;color:var(--ink);font-weight:800;letter-spacing:.02em}
+  .logo i{display:inline-grid;place-items:center;width:30px;height:30px;border-radius:9px;background:linear-gradient(135deg,#0b6e4f,#18b6c9);font-style:normal;font-size:17px;color:#fff;box-shadow:0 0 22px rgba(43,214,155,.35)}
+  .nav nav{display:flex;align-items:center;gap:8px;flex-wrap:wrap;justify-content:flex-end}
+  .nav nav a{font-size:13px;color:var(--ink);padding:7px 12px;border:1px solid var(--line);border-radius:999px;background:var(--glass);backdrop-filter:blur(8px)}
+  .nav nav a:hover{text-decoration:none;border-color:var(--brand)}
+  .langs{display:inline-flex;border:1px solid var(--line);border-radius:999px;overflow:hidden;background:var(--glass);backdrop-filter:blur(8px)}
+  .langs button{border:0;background:none;color:var(--muted);font:700 11px var(--mono);letter-spacing:.06em;padding:8px 9px;cursor:pointer}
+  .langs button[aria-pressed="true"]{color:#04110c;background:var(--brand)}
+
+  /* hero */
+  .hero{position:relative;min-height:100vh;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.08fr);align-items:center;overflow:hidden;
+        background:radial-gradient(1200px 700px at 72% 45%,rgba(24,182,201,.13),transparent 60%),radial-gradient(900px 600px at 10% 90%,rgba(43,214,155,.08),transparent 60%),var(--bg)}
+  .hero::after{content:"";position:absolute;inset:auto 0 0 0;height:160px;background:linear-gradient(180deg,transparent,var(--bg));pointer-events:none}
+  #globe{position:absolute;top:0;right:0;width:62%;height:100%;display:block;cursor:grab;touch-action:pan-y}
+  #globe:active{cursor:grabbing}
+  .hero-copy{position:relative;z-index:2;padding:120px 0 80px 6vw;max-width:660px}
+  .eyebrow{display:inline-flex;gap:8px;align-items:center;font:600 12px var(--mono);letter-spacing:.08em;text-transform:uppercase;color:var(--brand);
+           border:1px solid var(--line);border-radius:999px;padding:6px 12px;background:var(--glass)}
+  .eyebrow b{width:7px;height:7px;border-radius:50%;background:var(--brand);box-shadow:0 0 12px var(--brand);animation:pulse 2s infinite}
+  @keyframes pulse{50%{opacity:.35}}
+  h1{font-size:clamp(38px,5.4vw,72px);line-height:1.02;margin:20px 0 18px;letter-spacing:-.025em;
+     background:linear-gradient(100deg,#ffffff 0%,#c9fbe8 45%,#7fe9d6 70%,#5ac8ff 100%);-webkit-background-clip:text;background-clip:text;color:transparent}
+  .lead{font-size:clamp(17px,1.5vw,20px);color:var(--muted);max-width:560px;margin:0 0 28px}
+  .cta{display:flex;gap:12px;flex-wrap:wrap}
+  .btn{display:inline-flex;align-items:center;gap:8px;padding:13px 20px;border-radius:14px;font-weight:700;font-size:15px;border:1px solid var(--line);color:var(--ink);background:var(--card);transition:.2s}
+  .btn:hover{text-decoration:none;transform:translateY(-2px);border-color:var(--brand)}
+  .btn.primary{background:linear-gradient(135deg,#2bd69b,#18b6c9);color:#03130d;border:0;box-shadow:0 10px 40px rgba(43,214,155,.28)}
+  .stats{display:flex;gap:26px;flex-wrap:wrap;margin-top:36px;color:var(--muted);font-size:14px}
+  .stats b{display:block;font:800 30px/1.1 ui-sans-serif,system-ui;color:var(--ink);letter-spacing:-.02em}
+  .stats .live b::after{content:"";display:inline-block;width:8px;height:8px;margin-left:8px;border-radius:50%;background:var(--brand);box-shadow:0 0 10px var(--brand);vertical-align:middle;animation:pulse 2s infinite}
+  .hint{position:absolute;right:24px;bottom:28px;z-index:3;font:12px var(--mono);color:var(--muted);text-align:right;max-width:360px}
+  .legend{display:flex;gap:10px;flex-wrap:wrap;justify-content:flex-end;margin-bottom:6px}
+  .legend span{display:inline-flex;align-items:center;gap:5px}
+  .legend i{width:9px;height:9px;border-radius:50%;display:inline-block}
+  .tip{position:fixed;z-index:30;pointer-events:none;padding:10px 13px;border-radius:12px;background:var(--card);border:1px solid rgba(43,214,155,.45);
+       font-size:14px;box-shadow:0 10px 30px rgba(0,0,0,.4);transform:translate(14px,14px);opacity:0;transition:opacity .12s}
+  .tip b{font-size:15px}
+  .tip small{display:block;color:var(--muted)}
+
+  /* sections */
+  section.block{padding:96px 0;position:relative}
+  .kicker{font:700 12px var(--mono);letter-spacing:.12em;text-transform:uppercase;color:var(--brand)}
+  h2{font-size:clamp(28px,3.4vw,44px);line-height:1.1;margin:10px 0 14px;letter-spacing:-.02em}
+  .sub{color:var(--muted);max-width:720px;font-size:17px;margin:0 0 40px}
+  .grid3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:18px}
+  .grid4{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:18px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:26px;position:relative;overflow:hidden}
+  .card::before{content:"";position:absolute;inset:-1px;border-radius:inherit;padding:1px;background:linear-gradient(140deg,rgba(43,214,155,.5),transparent 40%,transparent 60%,rgba(24,182,201,.35));
+                -webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);-webkit-mask-composite:xor;mask-composite:exclude;pointer-events:none}
+  .card h3{margin:12px 0 8px;font-size:20px}
+  .card p{margin:0;color:var(--muted)}
+  .ico{width:44px;height:44px;border-radius:13px;display:grid;place-items:center;font-size:22px;background:rgba(43,214,155,.12);border:1px solid var(--line)}
+  .step .n{font:800 13px var(--mono);color:var(--brand);letter-spacing:.1em}
+  .flowline{height:2px;background:linear-gradient(90deg,transparent,var(--brand),var(--brand2),transparent);margin:-6px 0 24px;opacity:.5}
+
+  .nets{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:12px}
+  .net{display:flex;align-items:center;gap:12px;padding:16px;border-radius:16px;background:var(--card);border:1px solid var(--line);transition:.2s}
+  .net:hover{transform:translateY(-3px);border-color:var(--c)}
+  .net i{width:14px;height:14px;border-radius:50%;background:var(--c);box-shadow:0 0 16px var(--c);flex:none}
+  .net b{display:block;font-size:15px}
+  .net small{color:var(--muted);font-size:12.5px}
+
+  .try{display:grid;grid-template-columns:minmax(0,.9fr) minmax(0,1.1fr);gap:22px;align-items:start}
+  form.q{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+  form.q label{display:grid;gap:6px;font-size:13px;color:var(--muted)}
+  form.q .full{grid-column:1/-1}
+  select,input{font:inherit;color:var(--ink);background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:11px 12px;width:100%;min-width:0;max-width:100%}
+  form.q label{min-width:0}
+  form.q button{grid-column:1/-1;font:inherit;font-weight:800;border:0;border-radius:12px;padding:13px;cursor:pointer;color:#03130d;background:linear-gradient(135deg,#2bd69b,#18b6c9)}
+  pre{margin:0;background:var(--code);border:1px solid var(--line);border-radius:14px;padding:16px;overflow-x:auto;font:13px/1.6 var(--mono);color:var(--code-ink)}
+  pre .k{color:#7fe9d6} pre .s{color:#ffd58a} pre .c{color:#5f7a70}
+  .offers{display:grid;gap:10px;margin-top:14px}
+  .offer{display:grid;grid-template-columns:1fr auto;gap:6px 14px;align-items:center;padding:14px 16px;border-radius:14px;background:var(--surface);border:1px solid var(--line)}
+  .offer b{font-size:16px}
+  .offer .price{font:800 22px ui-sans-serif,system-ui;color:var(--brand);text-align:right}
+  .offer small{color:var(--muted)}
+  .offer a{font-size:13px}
+  .signed{font:12px var(--mono);color:var(--brand);margin-top:10px}
+  .muted{color:var(--muted)}
+
+  .rails{display:grid;grid-template-columns:minmax(0,1.05fr) minmax(0,.95fr);gap:26px;align-items:center}
+  .diagram{position:relative;padding:22px;border-radius:var(--radius);background:var(--card);border:1px solid var(--line)}
+  .lane{display:grid;grid-template-columns:1fr 34px 1fr 34px 1fr;align-items:center;gap:0;margin:10px 0}
+  .node{padding:12px 10px;border-radius:12px;text-align:center;font-weight:700;font-size:14px;background:var(--surface);border:1px solid var(--line)}
+  .node small{display:block;font-weight:500;color:var(--muted);font-size:11.5px}
+  .node.you{border-color:var(--brand);box-shadow:0 0 24px rgba(43,214,155,.18)}
+  .arrow{height:2px;background:linear-gradient(90deg,var(--brand),var(--brand2));position:relative}
+  .arrow::after{content:"";position:absolute;right:-1px;top:-4px;border:5px solid transparent;border-left-color:var(--brand2)}
+  .lane-label{font:11px var(--mono);color:var(--muted);letter-spacing:.06em;text-transform:uppercase;margin-top:14px}
+
+  .run{display:grid;grid-template-columns:minmax(0,.8fr) minmax(0,1.2fr);gap:26px;align-items:center}
+  .gallery{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px}
+  .shot{margin:0;border-radius:16px;overflow:hidden;background:var(--card);border:1px solid var(--line);transition:.25s}
+  .shot:hover{transform:translateY(-4px);border-color:var(--brand)}
+  .shot img{display:block;width:100%;aspect-ratio:16/10;object-fit:cover;object-position:top}
+  .shot figcaption{padding:12px 14px;font-size:14px;color:var(--muted)}
+  .docs{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:12px}
+  .ints{display:grid;grid-template-columns:1fr auto;gap:8px 14px;margin-top:12px;font-size:14.5px}
+  .ints span:nth-child(even){font:600 12px var(--mono);color:var(--muted);text-align:right;white-space:nowrap}
+  .steps7{margin:12px 0 0;padding-left:20px;color:var(--muted);line-height:1.75}
+  .docs .card{padding:18px}
+  .docs h3{margin:0 0 10px;font-size:16px}
+  .docs a{display:block;font-size:14px;padding:3px 0}
+  footer{padding:50px 0 70px;border-top:1px solid var(--line);color:var(--muted);font-size:14px}
+  footer .row{display:flex;justify-content:space-between;gap:20px;flex-wrap:wrap}
+  footer a{color:var(--muted)}
+
+  .reveal{opacity:1;transform:none}
+  .reveal.in{opacity:1;transform:none}
+  @media (prefers-reduced-motion: reduce){.reveal{opacity:1;transform:none;transition:none}html{scroll-behavior:auto}}
+
+  @media (max-width:1000px){
+    .hero{grid-template-columns:1fr;min-height:auto}
+    #globe{position:relative;width:100%;height:58vh;min-height:360px;order:-1;margin-top:64px}
+    .hero-copy{padding:0 20px 60px;max-width:none}
+    .hint{position:relative;right:auto;bottom:auto;padding:0 20px 30px;text-align:left}
+    .legend{justify-content:flex-start}
+    .grid3,.grid4,.try,.rails,.run{grid-template-columns:minmax(0,1fr)}
+    .nets{grid-template-columns:repeat(2,minmax(0,1fr))}
+    .gallery{grid-template-columns:repeat(2,minmax(0,1fr))}
+    .docs{grid-template-columns:repeat(2,minmax(0,1fr))}
+  }
+  @media (max-width:440px){.logo span{display:none}}
+  @media (max-width:560px){
+    .nav{padding:10px 12px}
+    .nav nav a.hide-s{display:none}
+    .nav nav{gap:6px}
+    .langs button{padding:8px 7px}
+    .gallery,.docs{grid-template-columns:1fr}
+    form.q{grid-template-columns:1fr}
+    .lane{grid-template-columns:1fr 18px 1fr 18px 1fr}
+    .node{font-size:12px;padding:10px 6px}
+    section.block{padding:70px 0}
+  }
+
+  /* Restrained, editorial presentation across both palettes. */
+  [hidden]{display:none!important}
+  :focus-visible{outline:3px solid var(--brand);outline-offset:4px}
+  html{scroll-padding-top:100px}
+  .nav{padding:18px 4vw;background:var(--glass);border-bottom:1px solid var(--line);backdrop-filter:blur(20px)}
+  .logo{font-weight:600;letter-spacing:-.025em}
+  .logo i{background:var(--brand);color:var(--bg);border-radius:50%;box-shadow:none;width:36px;height:36px}
+  .nav nav a{background:transparent;border-color:transparent;min-height:40px;display:inline-flex;align-items:center}
+  .langs button{min-height:40px}
+  .theme-toggle{border:1px solid var(--line);border-radius:50%;width:42px;height:42px;font:24px/1 system-ui;background:var(--card);color:var(--ink);cursor:pointer}
+  .hero{min-height:800px;min-height:min(900px,100svh);background:radial-gradient(ellipse at 80% 50%,color-mix(in srgb,var(--brand) 9%,transparent),transparent 65%),var(--bg)}
+  .hero-copy{padding:150px 0 100px 6vw;max-width:650px}
+  .eyebrow{font:500 10px/1.5 var(--mono);letter-spacing:.1em;padding:0;border:0;border-radius:0;background:transparent;color:var(--muted)}
+  .eyebrow b{box-shadow:none;animation:none;width:5px;height:5px}
+  h1{font:400 clamp(46px,5.8vw,80px)/1.02 Georgia,"Times New Roman",serif;letter-spacing:-.05em;color:var(--ink);background:none;margin:26px 0}
+  .lead{font-size:17px;line-height:1.75;max-width:510px;color:var(--muted)}
+  .cta{gap:10px}
+  .btn{border-radius:10px;padding:13px 18px;font-size:13px;font-weight:600;box-shadow:none}
+  .btn.primary,form.q button{background:var(--brand);color:var(--bg);box-shadow:none}
+  .cta .btn:last-child{background:transparent;border-color:transparent}
+  .stats{border-top:1px solid var(--line);padding-top:24px;margin-top:38px;gap:28px;font-size:11px}
+  .stats b{font-size:26px;font-weight:500;margin-bottom:6px}
+  .stats .live b::after{width:5px;height:5px;box-shadow:none;animation:none}
+  .hint{font-size:10px;line-height:1.7;max-width:330px;right:4vw}
+  .kicker{font-size:10px;font-weight:500;letter-spacing:.15em}
+  h2{font-weight:500;letter-spacing:-.035em}
+  .card{padding:28px;box-shadow:0 10px 32px #10281803}
+  .card::before{display:none}
+  .card h3{font-size:19px;font-weight:600}
+  .card p{font-size:15px;line-height:1.75}
+  .ico{background:var(--surface);border-radius:50%}
+  .net{border-radius:12px}.net i{box-shadow:none;width:9px;height:9px}
+  .net b{font-weight:600}.node.you{box-shadow:none}.node{min-width:0;overflow-wrap:anywhere}.lane{grid-template-columns:minmax(0,1fr) 34px minmax(0,1fr) 34px minmax(0,1fr)}
+  pre .k{color:var(--brand)}pre .s{color:var(--gold)}pre .c{color:var(--muted)}
+  section.block + section.block{border-top:1px solid var(--line)}
+  .tip{box-shadow:0 10px 30px #10281820;border-color:var(--line);max-width:250px}
+  footer a{color:var(--ink)}
+  @media(max-width:1000px){
+    .hero{min-height:auto}.hero-copy{padding:130px 28px 20px;order:-2;max-width:740px}
+    #globe{margin-top:0;height:440px;min-height:300px}.hint{padding:0 28px 30px;right:auto;max-width:600px}
+    .hero::after{display:none}
+  }
+  @media(max-width:560px){
+    .nav{padding:10px 12px;gap:8px}.nav nav{gap:5px}.nav nav a{font-size:12px;padding:6px 8px}
+    .langs button{padding:6px;min-height:40px}.theme-toggle{width:40px;height:40px;flex:none}
+    .hero-copy{padding:110px 20px 20px}h1{font-size:54px}.lead{font-size:15px}
+    .stats{gap:20px}.stats b{font-size:24px}.cta .btn{padding:12px 14px;font-size:12px}
+    .lane{grid-template-columns:minmax(0,1fr) 18px minmax(0,1fr) 18px minmax(0,1fr)}
+    #globe{height:340px}.hint{padding:0 20px 28px}.wrap{padding:0 20px}
+  }
+  @media(prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important}}
+</style>
+</head>
+<body>
+
+<header class="nav">
+  <a class="logo" href="#top"><i>◎</i><span>eSIM operator kit</span></a>
+  <nav>
+    <a href="https://esim-shop.modelmarket.dev/" data-i18n="nav_demo">Live demo</a>
+    <a class="hide-s" href="#docs" data-i18n="nav_docs">Docs</a>
+    <a class="hide-s" href="https://github.com/alexar76/esim-operator-kit">GitHub</a>
+    <button type="button" class="theme-toggle" data-theme-toggle aria-label="Switch theme"><span aria-hidden="true">◐</span></button>
+    <span class="langs" role="group" aria-label="Language">
+      <button data-lang="en">EN</button><button data-lang="ru">RU</button><button data-lang="es">ES</button><button data-lang="fr">FR</button><button data-lang="zh">ZH</button>
+    </span>
+  </nav>
+</header>
+
+<section class="hero" id="top">
+  <canvas id="globe" aria-label="Globe of the countries the live catalogue covers"></canvas>
+  <div class="hero-copy">
+    <span class="eyebrow"><b></b><span data-i18n="eyebrow">Open source · MIT · AIMarket rails</span></span>
+    <h1 data-i18n="h1">Sell eSIMs to AI agents.</h1>
+    <p class="lead" data-i18n="lead">Put your eSIM business on the AIMarket rails: agents find your offers through the federation and pay over x402, straight to your wallet. Keep your platform and your supplier — or start from scratch with the shop included.</p>
+    <div class="cta">
+      <a class="btn primary" href="#onboard" data-i18n="cta_onboard">Onboard your eSIM business</a>
+      <a class="btn" href="https://esim-shop.modelmarket.dev/" data-i18n="cta_shop">Example shop</a>
+      <a class="btn" href="https://github.com/alexar76/esim-operator-kit">★ GitHub</a>
+    </div>
+    <div class="stats">
+      <div class="live"><b id="s-plans">1 728</b><span data-i18n="stat_plans">plans live</span></div>
+      <div><b id="s-countries">205</b><span data-i18n="stat_countries">countries</span></div>
+      <div><b>10</b><span data-i18n="stat_networks">networks</span></div>
+      <div><b>5</b><span data-i18n="stat_langs">languages</span></div>
+    </div>
+  </div>
+  <div class="hint">
+    <div class="legend" id="legend"></div>
+    <span data-i18n="hint">Drag to spin · hover a country · click to open its plans. Countries and prices are the live catalogue; the arcs are an illustration of sales, coloured by network.</span>
+  </div>
+</section>
+<div class="tip" id="tip" role="status"></div>
+
+<section class="block" id="onboard">
+  <div class="wrap">
+    <div class="kicker reveal" data-i18n="onb_k">Already an operator</div>
+    <h2 class="reveal" data-i18n="onb_title">Plug your systems in. Don't rebuild them.</h2>
+    <p class="sub reveal" data-i18n="onb_sub">Operators, MVNOs, resellers and travel platforms keep their platform, their supplier and their checkout. Four ways in; every one ends with your offers in front of agents.</p>
+    <div class="grid4">
+      <div class="card reveal"><div class="n" style="font:800 13px var(--mono);color:var(--brand)">A</div><h3 data-i18n="onb_a_h">Your supplier account</h3><p data-i18n="onb_a_p">eSIM Access, Airalo or eSIM Go: set SUPPLIER, add your keys, docker compose up. The whole kit runs on your account.</p></div>
+      <div class="card reveal"><div class="n" style="font:800 13px var(--mono);color:var(--brand)">B</div><h3 data-i18n="onb_b_h">Your own system</h3><p data-i18n="onb_b_p">Five signed HTTP endpoints in any language — catalog, orders, profiles, cancel, balance. The kit does agents, payments and federation.</p></div>
+      <div class="card reveal"><div class="n" style="font:800 13px var(--mono);color:var(--brand)">C</div><h3 data-i18n="onb_c_h">The SDK</h3><p data-i18n="onb_c_p">@aimarket/esim-rails inside your Node.js service: createNode() with signing, x402 and idempotent orders.</p></div>
+      <div class="card reveal"><div class="n" style="font:800 13px var(--mono);color:var(--brand)">D</div><h3 data-i18n="onb_d_h">Your own agent API</h3><p data-i18n="onb_d_p">Implement esim.*@v1 in your stack, check it with esim-rails check, then announce it to a hub.</p></div>
+    </div>
+    <div class="rails" style="margin-top:22px">
+      <div class="card reveal">
+        <h3 data-i18n="onb_int_title">Ready integrations</h3>
+        <div class="ints" id="ints"></div>
+      </div>
+      <div class="card reveal">
+        <h3 data-i18n="onb_steps_title">Onboarding in seven steps</h3>
+        <ol class="steps7">
+          <li data-i18n="onb_s1">Read what agents will call (agent guide).</li>
+          <li data-i18n="onb_s2">Choose a path: A, B, C or D.</li>
+          <li data-i18n="onb_s3">Run the kit in demo mode with your supplier.</li>
+          <li data-i18n="onb_s4">Point the webhooks at your CRM; make one test order.</li>
+          <li data-i18n="onb_s5">Run esim-rails check until every line is ✓.</li>
+          <li data-i18n="onb_s6">Start the federation node and knock on a hub.</li>
+          <li data-i18n="onb_s7">Switch demo mode off: you sell to agents.</li>
+        </ol>
+        <p style="margin:12px 0 0"><a data-doc="rails" href="https://esim.modelmarket.dev/kit/rails" data-i18n="onb_more">Onboarding guide, with diagrams →</a> · <a data-doc="integrations" href="https://esim.modelmarket.dev/kit/integrations" data-i18n="onb_more2">Integrations →</a></p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="block" id="who">
+  <div class="wrap">
+    <div class="kicker reveal" data-i18n="who_k">Who buys</div>
+    <h2 class="reveal" data-i18n="who_title">Two kinds of buyers. One wholesale balance.</h2>
+    <p class="sub reveal" data-i18n="who_sub">The storefront and the seller node buy from the same eSIM Access account. You set one margin; both sell at it.</p>
+    <div class="grid3">
+      <div class="card reveal"><div class="ico">🧳</div><h3 data-i18n="who_people_h">Travellers</h3><p data-i18n="who_people_p">A page per country, prices in dollars, checkout from any wallet or exchange, the QR code a minute later. Five languages, phone first.</p></div>
+      <div class="card reveal"><div class="ico">🤖</div><h3 data-i18n="who_agents_h">AI agents</h3><p data-i18n="who_agents_p">esim.quote and esim.status are free and signed; esim.order is one x402 payment in USDC on Base. Hubs of the AIMarket federation list your node, so agents find you.</p></div>
+      <div class="card reveal"><div class="ico">🛰️</div><h3 data-i18n="who_you_h">You, the operator</h3><p data-i18n="who_you_p">Your wholesale account, your margin, your wallets. No processor in between and no hub fee on direct sales: buyers pay you, the kit only reads the chain.</p></div>
+    </div>
+  </div>
+</section>
+
+<section class="block" id="flow">
+  <div class="wrap">
+    <div class="kicker reveal" data-i18n="flow_k">The sale</div>
+    <h2 class="reveal" data-i18n="flow_title">From a quote to an installed eSIM in under a minute</h2>
+    <p class="sub reveal" data-i18n="flow_sub">The live test order on 2026-10-14 was allocated in 2.5 seconds; the same payment sent twice found the same eSIM.</p>
+    <div class="flowline reveal"></div>
+    <div class="grid4">
+      <div class="card step reveal"><div class="n">01</div><h3 data-i18n="flow_1_h">Quote</h3><p data-i18n="flow_1_p">The buyer picks a plan. Price = wholesale + your margin, held for 20 minutes.</p></div>
+      <div class="card step reveal"><div class="n">02</div><h3 data-i18n="flow_2_h">Pay</h3><p data-i18n="flow_2_p">USDT, USDC or TON to your address. The store reads the network itself: token, amount, confirmations.</p></div>
+      <div class="card step reveal"><div class="n">03</div><h3 data-i18n="flow_3_h">Deliver</h3><p data-i18n="flow_3_p">The profile is bought from your wholesale balance and shown as a QR code, an activation code and an install link.</p></div>
+      <div class="card step reveal"><div class="n">04</div><h3 data-i18n="flow_4_h">Settle</h3><p data-i18n="flow_4_p">An agent's payment settles only after its eSIM exists; a failed settlement cancels it. One payment buys one eSIM.</p></div>
+    </div>
+  </div>
+</section>
+
+<section class="block" id="networks">
+  <div class="wrap">
+    <div class="kicker reveal" data-i18n="nets_k">Payments</div>
+    <h2 class="reveal" data-i18n="nets_title">Ten networks, the tokens travellers already hold</h2>
+    <p class="sub reveal" data-i18n="nets_sub">Each network turns on when you give it an address — addresses only, never a key. Cards through Stripe if you want them.</p>
+    <div class="nets" id="nets"></div>
+  </div>
+</section>
+
+<section class="block" id="try">
+  <div class="wrap">
+    <div class="kicker reveal" data-i18n="try_k">Live</div>
+    <h2 class="reveal" data-i18n="try_title">Ask the rails, right now</h2>
+    <p class="sub reveal" data-i18n="try_sub">This form calls esim.quote on the demo seller node — the same request an AI agent makes. The answer is signed by the node.</p>
+    <div class="try">
+      <div class="card reveal">
+        <form class="q" id="q">
+          <label class="full"><span data-i18n="try_country">Destination</span><select id="q-country"></select></label>
+          <label><span data-i18n="try_gb">At least, GB</span><select id="q-gb"><option>1</option><option selected>3</option><option>5</option><option>10</option><option>20</option></select></label>
+          <label><span data-i18n="try_days">At least, days</span><select id="q-days"><option>1</option><option selected>7</option><option>15</option><option>30</option></select></label>
+          <button type="submit" data-i18n="try_go">Get live offers</button>
+        </form>
+        <div class="offers" id="offers" aria-live="polite"></div>
+        <div class="signed" id="signed" hidden></div>
+      </div>
+      <div class="reveal">
+        <pre id="curl"></pre>
+        <p class="muted" style="font-size:14px;margin-top:12px" data-i18n="try_note">Buying is the next call: POST the offer_id to the order URL with an x402 payment. The demo node answers it with demo_mode and sells nothing.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="block" id="rails">
+  <div class="wrap rails">
+    <div>
+      <div class="kicker reveal" data-i18n="rails_k">The rails</div>
+      <h2 class="reveal" data-i18n="rails_title">What connecting to the rails gives an operator</h2>
+      <div class="grid3" style="grid-template-columns:1fr 1fr;margin-top:26px">
+        <div class="card reveal"><h3 data-i18n="rails_1_h">Found by agents</h3><p data-i18n="rails_1_p">Your node announces itself to an AIMarket hub. After an admission check, agents searching the federation for an eSIM see your offers.</p></div>
+        <div class="card reveal"><h3 data-i18n="rails_2_h">Paid directly</h3><p data-i18n="rails_2_p">x402 moves USDC from the agent's wallet to yours. The hub routes the search, never the money.</p></div>
+        <div class="card reveal"><h3 data-i18n="rails_3_h">Answers you can check</h3><p data-i18n="rails_3_p">Every quote is signed with your node's Ed25519 key and bound to the request. Hubs verify it; agents can too.</p></div>
+        <div class="card reveal"><h3 data-i18n="rails_4_h">One shape for every seller</h3><p data-i18n="rails_4_p">Offers read the same at every seller, so agents compare price and coverage, not integrations.</p></div>
+      </div>
+    </div>
+    <div class="diagram reveal" aria-label="How the parts talk">
+      <div class="lane-label" data-i18n="lane_people">People</div>
+      <div class="lane"><div class="node">🧳 <span data-i18n="n_traveller">Traveller</span><small data-i18n="n_wallet">any wallet</small></div><div class="arrow"></div><div class="node you"><span data-i18n="n_store">Your store</span><small>/</small></div><div class="arrow"></div><div class="node">eSIM Access<small data-i18n="n_wholesale">wholesale</small></div></div>
+      <div class="lane-label" data-i18n="lane_agents">Agents</div>
+      <div class="lane"><div class="node">🤖 <span data-i18n="n_agent">Agent</span><small>MCP · x402</small></div><div class="arrow"></div><div class="node you"><span data-i18n="n_node">Your node</span><small>/agents</small></div><div class="arrow"></div><div class="node">eSIM Access<small data-i18n="n_wholesale">wholesale</small></div></div>
+      <div class="lane-label" data-i18n="lane_find">Discovery</div>
+      <div class="lane"><div class="node">AIMarket hub<small>modelmarket.dev</small></div><div class="arrow"></div><div class="node you"><span data-i18n="n_fed">Federation node</span><small>/.well-known</small></div><div class="arrow"></div><div class="node">🤖 <span data-i18n="n_agents">Agents</span><small>market_search</small></div></div>
+      <div class="lane-label" data-i18n="lane_money">Money</div>
+      <div class="lane"><div class="node">🧳 🤖<small data-i18n="n_buyers">buyers</small></div><div class="arrow"></div><div class="node you"><span data-i18n="n_wallets">Your wallets</span><small>Tron · TON · Solana · EVM</small></div><div class="arrow"></div><div class="node">eSIM Access<small data-i18n="n_topup">your top-ups</small></div></div>
+      <p style="margin:16px 0 0"><a data-doc="rails" href="https://esim.modelmarket.dev/kit/rails" data-i18n="rails_more">Rails &amp; use cases →</a></p>
+    </div>
+  </div>
+</section>
+
+<section class="block" id="run">
+  <div class="wrap run">
+    <div>
+      <div class="kicker reveal" data-i18n="run_k">Run it</div>
+      <h2 class="reveal" data-i18n="run_title">From an empty server to a store, in one compose file</h2>
+      <p class="sub reveal" style="margin-bottom:22px" data-i18n="run_sub">A domain, Docker and your eSIM Access keys. Caddy gets the certificate; the store runs in demo mode until you switch it on.</p>
+      <a class="btn primary reveal" data-doc="operator" href="https://esim.modelmarket.dev/kit/operator" data-i18n="run_guide">Read the operator guide</a>
+    </div>
+    <pre class="reveal"><span class="c"># 1. the kit</span>
+git clone https://github.com/alexar76/esim-operator-kit.git
+cd esim-operator-kit && cp .env.example .env
+<span class="c"># 2. your domain, margin and wallet addresses</span>
+nano .env
+<span class="c"># 3. the two eSIM Access keys, typed in, never echoed</span>
+read -rs v &amp;&amp; printf %s "$v" &gt; secrets/esimaccess_access_code
+read -rs v &amp;&amp; printf %s "$v" &gt; secrets/esimaccess_secret_key
+<span class="c"># 4. storefront + seller node + HTTPS</span>
+docker compose up -d --build
+<span class="c"># 5. listed on AIMarket hubs</span>
+docker compose --profile federation up -d node</pre>
+  </div>
+</section>
+
+<section class="block" id="gallery">
+  <div class="wrap">
+    <div class="kicker reveal" data-i18n="gal_k">Gallery</div>
+    <h2 class="reveal" data-i18n="gal_title">What your buyers see</h2>
+    <p class="sub reveal" data-i18n="gal_sub">The reference storefront, as it runs at esim-shop.modelmarket.dev. Addresses and codes in the payment screens are placeholders.</p>
+    <div class="gallery">
+      <figure class="shot reveal"><a href="screenshots/home.jpg"><img src="screenshots/home.jpg" alt="" loading="lazy"></a><figcaption data-i18n="g_home">Destinations and prices</figcaption></figure>
+      <figure class="shot reveal"><a href="screenshots/country.jpg"><img src="screenshots/country.jpg" alt="" loading="lazy"></a><figcaption data-i18n="g_country">A country's plans, filtered by data and days</figcaption></figure>
+      <figure class="shot reveal"><a href="screenshots/checkout.jpg"><img src="screenshots/checkout.jpg" alt="" loading="lazy"></a><figcaption data-i18n="g_checkout">Checkout: ten networks</figcaption></figure>
+      <figure class="shot reveal"><a href="screenshots/pay-tron.jpg"><img src="screenshots/pay-tron.jpg" alt="" loading="lazy"></a><figcaption data-i18n="g_tron">Paying USDT on Tron: the exact amount and a QR code</figcaption></figure>
+      <figure class="shot reveal"><a href="screenshots/esim.jpg"><img src="screenshots/esim.jpg" alt="" loading="lazy"></a><figcaption data-i18n="g_esim">The eSIM, ready to install</figcaption></figure>
+      <figure class="shot reveal"><a href="screenshots/kit-docs.jpg"><img src="screenshots/kit-docs.jpg" alt="" loading="lazy"></a><figcaption data-i18n="g_docs">The guides, in five languages</figcaption></figure>
+    </div>
+  </div>
+</section>
+
+<section class="block" id="docs">
+  <div class="wrap">
+    <div class="kicker reveal" data-i18n="docs_k">Docs</div>
+    <h2 class="reveal" data-i18n="docs_title">Guides in five languages</h2>
+    <div class="docs" id="docs-grid"></div>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap row">
+    <div><b>eSIM operator kit</b> · <span data-i18n="foot_part">part of the AIMarket ecosystem</span> · <a href="https://github.com/alexar76/esim-operator-kit/blob/main/LICENSE">MIT</a><br><span data-i18n="foot_demo">The demo sells nothing: payments are off.</span></div>
+    <div><a href="https://modelmarket.dev/">modelmarket.dev</a> · <a href="https://modelmarket.dev/tools/" data-i18n="foot_tools">Free tools</a> · <a href="https://github.com/alexar76">github.com/alexar76</a></div>
+  </div>
+</footer>
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.161.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.161.0/examples/jsm/"
+  }
+}
+</script>
+<script type="module" src="landing.js"></script>
+</body>
+</html>

@@ -1,0 +1,14 @@
+# Your price list (PRICES_FILE=/config/prices.csv). Copy this file to prices.csv and edit it.
+# A plan no line picks is priced by MARGIN_PCT and MIN_MARGIN_USD from .env.
+# The most specific line wins: an offer id, then a country, then region/global, then *.
+#
+#   match       an offer id (TR_1_7), a country (TR), region, global or *
+#   gb, days    optional beside a country, region, global or *: only plans of that size and length
+#   price_usd   a fixed price, or off: the plan is not offered
+#   margin_pct, min_margin_usd   or the formula with these numbers for the picked plans
+match,gb,days,price_usd,margin_pct,min_margin_usd
+TR,1,7,4.50,,
+TR,,,,80,
+JP,,,,,2.00
+global,,,,60,
+US_0.1_7,,,off,,

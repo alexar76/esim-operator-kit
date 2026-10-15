@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/alexar76/esim-operator-kit/blob/main/rails/spec/esim-v1/quote-input.schema.json",
+  "title": "esim.quote@v1 input",
+  "type": "object",
+  "required": [
+    "country"
+  ],
+  "properties": {
+    "country": {
+      "type": "string",
+      "pattern": "^[A-Z]{2}$",
+      "description": "ISO 3166-1 alpha-2 code of the destination"
+    },
+    "min_gb": {
+      "type": "number",
+      "minimum": 0
+    },
+    "min_days": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "max_usd": {
+      "type": "number",
+      "minimum": 0
+    },
+    "limit": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 50
+    }
+  }
+}

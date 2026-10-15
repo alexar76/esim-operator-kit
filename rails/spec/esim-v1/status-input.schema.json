@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/alexar76/esim-operator-kit/blob/main/rails/spec/esim-v1/status-input.schema.json",
+  "title": "esim.status@v1 input",
+  "type": "object",
+  "required": [
+    "esim_tran_no",
+    "status_token"
+  ],
+  "properties": {
+    "esim_tran_no": {
+      "type": "string"
+    },
+    "status_token": {
+      "type": "string"
+    }
+  }
+}

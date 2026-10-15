@@ -1,0 +1,33 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: rails (SDK, suppliers, webhooks, contract) + store (ten networks, pages, docs)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020  # v4.4.0
+        with:
+          node-version: "22"
+      - run: npm ci --prefix rails --no-audit --no-fund
+      - run: npm ci --prefix store --no-audit --no-fund
+      - run: npm test --prefix rails
+      - run: npm test --prefix store
+      - name: the contract's schemas are where the CLI says
+        run: node rails/bin/esim-rails.mjs schemas
+      - name: docker compose reads with the example settings
+        run: cp .env.example .env && touch node.toml && docker compose config -q && docker compose --profile federation config -q

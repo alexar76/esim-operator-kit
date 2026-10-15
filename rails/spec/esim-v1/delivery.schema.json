@@ -1,0 +1,64 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/alexar76/esim-operator-kit/blob/main/rails/spec/esim-v1/delivery.schema.json",
+  "title": "esim.order@v1 result: one eSIM, for the payer only",
+  "type": "object",
+  "required": [
+    "esim_tran_no",
+    "activation_code",
+    "status_token"
+  ],
+  "properties": {
+    "order_no": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "esim_tran_no": {
+      "type": "string",
+      "pattern": "^[0-9A-Za-z_-]{6,64}$"
+    },
+    "iccid": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "activation_code": {
+      "type": "string",
+      "pattern": "^LPA:1\\$"
+    },
+    "qr_code_url": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "install_url": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "apn": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "expires": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "status_token": {
+      "type": "string",
+      "minLength": 16
+    },
+    "offer": {
+      "$ref": "offer.schema.json"
+    }
+  }
+}

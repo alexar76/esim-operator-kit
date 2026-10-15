@@ -1,0 +1,71 @@
+{
+  "name": "@aimarket/esim-rails",
+  "version": "0.2.0",
+  "description": "SDK for eSIM operators on AIMarket rails: a seller node AI agents buy eSIMs from over x402, a supplier interface for your own provisioning system (or eSIM Access), signed webhooks for your CRM and billing, the esim.*@v1 JSON Schemas and a conformance check.",
+  "type": "module",
+  "license": "MIT",
+  "homepage": "https://alexar76.github.io/esim-operator-kit/",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/alexar76/esim-operator-kit.git",
+    "directory": "rails"
+  },
+  "bugs": {
+    "url": "https://github.com/alexar76/esim-operator-kit/issues"
+  },
+  "keywords": [
+    "esim",
+    "x402",
+    "ai-agents",
+    "aimarket",
+    "travel",
+    "usdc",
+    "mcp",
+    "telecom",
+    "reseller"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "exports": {
+    ".": "./src/index.js",
+    "./supplier": "./src/supplier.js",
+    "./http-supplier": "./src/http-supplier.js",
+    "./webhooks": "./src/webhooks.js",
+    "./check": "./src/check.js",
+    "./spec/*": "./spec/*",
+    "./package.json": "./package.json"
+  },
+  "bin": {
+    "esim-rails": "bin/esim-rails.mjs"
+  },
+  "files": [
+    "src",
+    "bin",
+    "spec",
+    "examples",
+    "scripts",
+    "README.md",
+    "node.toml.example"
+  ],
+  "scripts": {
+    "test": "node --test \"test/**/*.test.js\"",
+    "start": "node src/server.js",
+    "catalog": "node scripts/catalog.mjs",
+    "check": "node bin/esim-rails.mjs check",
+    "build": "node --check src/index.js && node bin/esim-rails.mjs schemas > /dev/null"
+  },
+  "dependencies": {
+    "@coinbase/cdp-sdk": "1.57.1",
+    "@x402/core": "2.28.0",
+    "@x402/evm": "2.28.0",
+    "@x402/express": "2.28.0",
+    "@x402/extensions": "2.28.0",
+    "@x402/svm": "2.28.0",
+    "express": "^5.1.0",
+    "viem": "2.57.6"
+  },
+  "devDependencies": {
+    "@x402/fetch": "2.28.0"
+  }
+}

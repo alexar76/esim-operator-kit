@@ -1,0 +1,12 @@
+.env
+node.toml
+# Your price list (PRICES_FILE); the example is shipped.
+config/prices.csv
+config/prices.json
+# Secret files stay local; the README that lists them is shipped.
+secrets/*
+!secrets/README.md
+data/
+node_modules/
+# The landing globe's build script and its price data are sources (the monorepo ignores build/).
+!docs/landing/build/

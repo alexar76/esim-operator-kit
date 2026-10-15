@@ -1,0 +1,125 @@
+{
+ "errorCode": null,
+ "errorMsg": null,
+ "success": true,
+ "obj": {
+  "packageList": [
+   {
+    "packageCode": "CKH139",
+    "slug": "SI_5_30",
+    "name": "Slovenia 5GB 30Days",
+    "price": 112500,
+    "currencyCode": "USD",
+    "volume": 5368709120,
+    "unusedValidTime": 180,
+    "duration": 30,
+    "durationUnit": "DAY",
+    "location": "SI",
+    "description": "Slovenia 5GB 30Days",
+    "activeType": 1,
+    "favorite": false,
+    "retailPrice": 112500,
+    "speed": "3G/4G",
+    "supportTopUpType": 2,
+    "dataType": 1,
+    "locationNetworkList": [
+     {
+      "locationName": "Slovenia",
+      "locationLogo": "https://static.redteago.com/img/logos/SloveniaFlag.png",
+      "operatorList": [
+       {
+        "operatorName": "A1",
+        "networkType": "4G"
+       }
+      ]
+     }
+    ]
+   },
+   {
+    "packageCode": "CKH003",
+    "slug": "ES_5_30",
+    "name": "Spain 5GB 30Days",
+    "price": 45000,
+    "currencyCode": "USD",
+    "volume": 5368709120,
+    "unusedValidTime": 180,
+    "duration": 30,
+    "durationUnit": "DAY",
+    "location": "ES",
+    "description": "Spain 5GB 30Days",
+    "activeType": 1,
+    "retailPrice": 90000,
+    "speed": "4G/5G",
+    "supportTopUpType": 1,
+    "dataType": 1,
+    "locationNetworkList": [
+     {
+      "locationName": "Spain",
+      "operatorList": [
+       {
+        "operatorName": "Movistar",
+        "networkType": "5G"
+       },
+       {
+        "operatorName": "Vodafone",
+        "networkType": "4G"
+       }
+      ]
+     }
+    ]
+   },
+   {
+    "packageCode": "EU7",
+    "slug": "EU-30_3_7",
+    "name": "Europe (30+ areas) 3GB 7Days",
+    "price": 28000,
+    "currencyCode": "USD",
+    "volume": 3221225472,
+    "unusedValidTime": 180,
+    "duration": 7,
+    "durationUnit": "DAY",
+    "location": "AT,BE,DE,ES,FR,IT,SI",
+    "description": "Europe 3GB 7Days",
+    "activeType": 1,
+    "retailPrice": 56000,
+    "speed": "4G",
+    "supportTopUpType": 2,
+    "dataType": 1,
+    "locationNetworkList": [
+     {
+      "locationName": "Austria",
+      "operatorList": []
+     },
+     {
+      "locationName": "Spain",
+      "operatorList": []
+     }
+    ]
+   },
+   {
+    "packageCode": "DP1",
+    "slug": "JP_1_Daily",
+    "name": "Japan 1GB/Day",
+    "price": 9000,
+    "currencyCode": "USD",
+    "volume": 1073741824,
+    "unusedValidTime": 180,
+    "duration": 1,
+    "durationUnit": "DAY",
+    "location": "JP",
+    "description": "Japan daily",
+    "activeType": 1,
+    "retailPrice": 18000,
+    "speed": "4G",
+    "supportTopUpType": 3,
+    "dataType": 2,
+    "locationNetworkList": [
+     {
+      "locationName": "Japan",
+      "operatorList": []
+     }
+    ]
+   }
+  ]
+ }
+}

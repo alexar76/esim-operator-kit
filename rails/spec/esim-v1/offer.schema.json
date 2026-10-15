@@ -1,0 +1,128 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/alexar76/esim-operator-kit/blob/main/rails/spec/esim-v1/offer.schema.json",
+  "title": "An eSIM offer, the same at every seller",
+  "type": "object",
+  "required": [
+    "offer_id",
+    "name",
+    "coverage",
+    "data_bytes",
+    "data_gb",
+    "days",
+    "price",
+    "usd_per_gb"
+  ],
+  "properties": {
+    "offer_id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_.,-]{1,64}$",
+      "description": "what esim.order@v1 takes"
+    },
+    "name": {
+      "type": "string",
+      "maxLength": 120
+    },
+    "coverage": {
+      "type": "object",
+      "required": [
+        "kind",
+        "countries"
+      ],
+      "properties": {
+        "kind": {
+          "enum": [
+            "country",
+            "region",
+            "global"
+          ]
+        },
+        "countries": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "pattern": "^[A-Z]{2}$"
+          }
+        }
+      }
+    },
+    "data_bytes": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "data_gb": {
+      "type": "number",
+      "minimum": 0
+    },
+    "days": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "speed": {
+      "type": "string"
+    },
+    "networks": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "country",
+          "operators"
+        ],
+        "properties": {
+          "country": {
+            "type": "string"
+          },
+          "operators": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "name"
+              ],
+              "properties": {
+                "name": {
+                  "type": "string"
+                },
+                "type": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "top_up": {
+      "type": "boolean"
+    },
+    "unused_valid_days": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "minimum": 0
+    },
+    "price": {
+      "type": "object",
+      "required": [
+        "usd",
+        "currency"
+      ],
+      "properties": {
+        "usd": {
+          "type": "string",
+          "pattern": "^[0-9]+\\.[0-9]{2}$"
+        },
+        "currency": {
+          "const": "USDC"
+        }
+      }
+    },
+    "usd_per_gb": {
+      "type": "number",
+      "minimum": 0
+    }
+  }
+}

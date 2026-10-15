@@ -1,0 +1,27 @@
+# aimarket node: makes this seller node findable by the hubs of the federation (docs/operator-guide.md, step 7).
+# Copy to node.toml, set name/url/product, then:  aimarket node serve --config node.toml
+#
+# Only the two free capabilities are described here. The order has a different price for every plan,
+# and a node.toml capability has one price, so agents buy at the URL every quote answer names
+# (POST <url>/order over x402) — straight from you, no hub in the payment.
+name = "Your eSIM shop"
+url = "https://esim.example.com"          # your public domain; send /.well-known/ai-market.json and /ai-market/* here
+upstream = "http://127.0.0.1:9490"        # the esim-rails node (docker compose: rails:9490)
+
+[[capability]]
+id = "esim.quote@v1"
+product = "esim-yourshop"
+description = "Travel data eSIM plans covering a country, cheapest first: data, days, networks and the price in USDC; each offer is bought at this seller's /order over x402."
+price_usd = 0
+method = "POST"
+path = "/quote"
+input_schema = { type = "object", required = ["country"], properties = { country = { type = "string", description = "ISO 3166-1 alpha-2, e.g. FR" }, min_gb = { type = "number" }, min_days = { type = "integer" }, max_usd = { type = "number" }, limit = { type = "integer" } } }
+
+[[capability]]
+id = "esim.status@v1"
+product = "esim-yourshop"
+description = "State, data used and expiry of an eSIM bought from this seller, for the holder of its status token."
+price_usd = 0
+method = "POST"
+path = "/status"
+input_schema = { type = "object", required = ["esim_tran_no", "status_token"], properties = { esim_tran_no = { type = "string" }, status_token = { type = "string" } } }
