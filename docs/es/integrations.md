@@ -54,7 +54,7 @@ recarga de $50 y el pedido de prueba.
 
 - Los pedidos son idempotentes en el propio eSIM Access (por `transactionId`).
 - El pedido lleva el coste con el que se ofertó; un plan cuyo precio cambió se rechaza, no se cobra.
-- Los perfiles sin usar se cancelan y se reembolsan a tu saldo automáticamente cuando un pago no se liquida.
+- Los perfiles sin usar se pueden cancelar durante un reembolso. Un pago incierto requiere conciliación, sin cancelación automática.
 
 ### 2.2 Airalo Partner API
 
@@ -79,7 +79,7 @@ Qué hace el adaptador: `POST /v2/token` una vez y guarda el token (Airalo permi
 token por minuto); `GET /v2/packages` para el catálogo (solo planes fijos: los paquetes ilimitados y
 las recargas quedan fuera de v1; `net_price` es tu coste); `POST /v2/orders` con el id de transacción
 del pago como descripción del pedido; `GET /v2/sims/{iccid}` y `/usage` para el estado;
-`POST /v2/refund` cuando un pago no se liquida.
+`POST /v2/refund` durante el reembolso de un perfil sin usar.
 
 Antes de vender:
 
@@ -105,7 +105,7 @@ Qué hace el adaptador: `GET /catalogue` página a página (`dataAmount` en MB, 
 tu organización, que debe ser USD; los paquetes ilimitados quedan fuera de v1); `POST /orders` con
 `assign: true`, que devuelve el ICCID, la dirección SM-DP+ y el matching id de cada eSIM;
 `GET /esims/{iccid}` y `/bundles` para estado y consumo;
-`DELETE /esims/{iccid}/bundles/{name}?refundToBalance=true` cuando un pago no se liquida.
+`DELETE /esims/{iccid}/bundles/{name}?refundToBalance=true` durante el reembolso de un perfil sin usar.
 
 Antes de vender:
 
@@ -164,7 +164,7 @@ Cada pedido que cambia de estado se envía por POST a `WEBHOOK_URL`, firmado:
 | `order.underpaid` | abrir una tarea de soporte |
 | `order.expired` | cerrar el lead |
 | `agent_order.delivered` | registrar una venta a un agente |
-| `agent_order.cancelled` | anotar una venta a un agente cancelada |
+| `agent_order.settlement_pending` | el pago requiere conciliación; no cobres de nuevo |
 
 ```bash
 WEBHOOK_URL=https://crm.example.com/hooks/esim

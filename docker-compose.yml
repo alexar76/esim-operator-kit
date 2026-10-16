@@ -19,6 +19,10 @@ services:
       KIT_URL: https://github.com/alexar76/esim-operator-kit
       ESIMACCESS_ACCESS_CODE_FILE: /run/secrets/esim/esimaccess_access_code
       ESIMACCESS_SECRET_KEY_FILE: /run/secrets/esim/esimaccess_secret_key
+      AIRALO_CLIENT_ID_FILE: ${AIRALO_CLIENT_ID_FILE:-/run/secrets/esim/airalo_client_id}
+      AIRALO_CLIENT_SECRET_FILE: ${AIRALO_CLIENT_SECRET_FILE:-/run/secrets/esim/airalo_client_secret}
+      ESIMGO_API_KEY_FILE: ${ESIMGO_API_KEY_FILE:-/run/secrets/esim/esimgo_api_key}
+      SUPPLIER_SECRET_FILE: ${SUPPLIER_SECRET_FILE:-/run/secrets/esim/supplier_secret}
       CDP_KEY_FILE: /run/secrets/esim/cdp_api_key.json
       TONAPI_KEY_FILE: /run/secrets/esim/tonapi_key
       TRONGRID_KEY_FILE: /run/secrets/esim/trongrid_key
@@ -44,6 +48,10 @@ services:
       PRODUCT_ID: ${PRODUCT_ID}
       ESIMACCESS_ACCESS_CODE_FILE: /run/secrets/esim/esimaccess_access_code
       ESIMACCESS_SECRET_KEY_FILE: /run/secrets/esim/esimaccess_secret_key
+      AIRALO_CLIENT_ID_FILE: ${AIRALO_CLIENT_ID_FILE:-/run/secrets/esim/airalo_client_id}
+      AIRALO_CLIENT_SECRET_FILE: ${AIRALO_CLIENT_SECRET_FILE:-/run/secrets/esim/airalo_client_secret}
+      ESIMGO_API_KEY_FILE: ${ESIMGO_API_KEY_FILE:-/run/secrets/esim/esimgo_api_key}
+      SUPPLIER_SECRET_FILE: ${SUPPLIER_SECRET_FILE:-/run/secrets/esim/supplier_secret}
       CDP_KEY_FILE: /run/secrets/esim/cdp_api_key.json
       STATUS_SECRET_FILE: /data/status_secret
       PROVIDER_KEY_FILE: /data/provider_ed25519.pem

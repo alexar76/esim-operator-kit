@@ -203,7 +203,7 @@ buyers use. USDT on Tron is the most common way to pay in crypto; USDT and USDC 
 
 | Method | Set | How the buyer pays | How the store confirms it |
 |---|---|---|---|
-| USDC on Base, gasless | `PAY_TO_EVM` + `secrets/cdp_api_key.json` | Signs one message in a browser wallet and pays no gas. | The CDP facilitator settles the signature. The eSIM is delivered first, then the payment settles; if settlement fails, the eSIM is cancelled. |
+| USDC on Base, gasless | `PAY_TO_EVM` + `secrets/cdp_api_key.json` | Signs one message in a browser wallet and pays no gas. | The CDP facilitator settles the signature. The eSIM is delivered first, then the payment settles; an uncertain result is held for reconciliation. |
 | USDC / USDT on 7 EVM networks | `PAY_TO_EVM` (+ `EVM_CHAINS`) | Sends the transfer from a browser wallet, or from any wallet or exchange and pastes the transaction hash. | Reads the receipt: a transfer of that token to you, of at least the price, newer than the order. It waits for confirmations: 3 on Ethereum and BNB Chain, 10 on Polygon, 1 elsewhere. One transaction pays one order. |
 | USDT on Tron | `PAY_TO_TRON` (+ `secrets/trongrid_key`) | Sends the exact amount shown, from TronLink on the page or from any wallet. | Each order asks for the price plus a few millionths of a dollar (at most $0.0099 more). That exact amount identifies the order among your confirmed USDT transfers. |
 | USDC on Solana | `PAY_TO_SOLANA` (+ `SOLANA_RPC`) | Opens the Solana Pay link or scans its QR code (Phantom, Solflare, Backpack). | Each order has its own reference key, which the wallet adds to the transfer. The store finds the transaction by it. |
@@ -354,7 +354,7 @@ Read the release notes before you update a store that sells.
 
 ## 12. Agents' orders
 
-Agents buy through `POST /agents/order` (see the [agent guide](agent-guide.md)). The node verifies the x402 payment, buys the profile, and settles only after the profile exists. If settlement fails, it cancels the profile, and the wholesale price returns to your balance. Agents' orders are recorded in `data/rails/orders.json`, without activation codes. The USDC arrives in `PAY_TO_EVM` on Base.
+Agents buy through `POST /agents/order` (see the [agent guide](agent-guide.md)). The node verifies the x402 payment, buys the profile, and settles only after the profile exists. If settlement is uncertain, it retains the profile for reconciliation; do not charge the buyer again. Agents' orders are recorded in `data/rails/orders.json`, without activation codes. The USDC arrives in `PAY_TO_EVM` on Base.
 
 **Refunds.** An agent can ask for a refund of an eSIM it has not installed: `POST /agents/refund` with the eSIM's number and status token. The node cancels the eSIM at the wholesaler, which refunds your balance, and pays the price back to the address that paid. Paying back is automatic only when you give the node a refund wallet (`REFUND_KEY_FILE`, capped by `REFUND_MAX_USD` and `REFUND_DAILY_MAX_USD`); without it the refund is recorded as due and the `agent_order.refund_due` webhook tells you to pay it. Setup, rules and a real refund with its transactions: [cases](cases.md).
 

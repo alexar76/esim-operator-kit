@@ -20,6 +20,7 @@ import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import * as fsp from "node:fs/promises";
 import { pricingFromEnv, supplierFromEnv, webhooksFromEnv } from "./config.js";
 import { createNode, ed25519Signer } from "./node.js";
+import { createBaseReconciler, startReconciliation } from "./reconcile.js";
 import { fileStore } from "./order.js";
 import { buildPaywall } from "./paywall.js";
 import { buildRefunder } from "./refund.js";
@@ -42,21 +43,23 @@ const pricing = pricingFromEnv(env);
 const events = webhooksFromEnv(env);
 const store = fileStore(env.ORDER_STORE || "/data/orders.json", fsp);
 const publicUrl = (env.PUBLIC_URL || "").replace(/\/+$/, "");
+const reconciler = createBaseReconciler({ rpcUrl: env.BASE_RPC || undefined });
 let node = null;
 const paywall = demo ? null : await buildPaywall({
-  cdpKeyFile: env.CDP_KEY_FILE, payTo: env.PAY_TO, publicUrl,
-  priceOf: (id) => node?.priceOf(id), onSettleFailure: (p) => node.settleFailed(p),
+  cdpKeyFile: env.CDP_KEY_FILE, payTo: env.PAY_TO, publicUrl, reconciler,
+  priceOf: (id) => node?.priceOf(id), onSettleFailure: (p) => node.settleFailed(p), onSettled: (p, r) => node.settled(p, r),
 }).catch((err) => { console.error(`payments off: ${err.message}`); return null; });
 const refunder = demo || !env.REFUND_KEY_FILE ? null : await buildRefunder({
-  keyFile: env.REFUND_KEY_FILE, cdpKeyFile: env.CDP_KEY_FILE, publicUrl,
+  budgetStore: store, keyFile: env.REFUND_KEY_FILE, cdpKeyFile: env.CDP_KEY_FILE, publicUrl,
   maxUsd: Number(env.REFUND_MAX_USD || 50), dailyMaxUsd: Number(env.REFUND_DAILY_MAX_USD || 50),
 }).catch((err) => { console.error(`automatic refunds off: ${err.message}`); return null; });
 node = createNode({
-  supplier, store, secret: statusSecret, signer: ed25519Signer(providerPem), publicUrl, paywall, refunder, events,
+  supplier, store, reconciler, secret: statusSecret, signer: ed25519Signer(providerPem), publicUrl, paywall, refunder, events,
   pricing,
   sellerName: env.SELLER_NAME || "eSIM seller", productId: env.PRODUCT_ID || "esim-rails", demo,
 });
 await node.offers().catch((err) => console.error(`catalogue not loaded yet: ${err.code || err.message}`));
+const reconciliationWorker = startReconciliation(() => node.reconcile());
 const port = Number(env.PORT || 9490);
 node.app.listen(port, env.HOST || "127.0.0.1", () =>
   console.log(`esim-rails node on ${port}; prices: ${pricing.marginPct} %, at least $${pricing.minMarginUsd}${pricing.rules ? `, ${pricing.rules.length} rules from ${pricing.file}` : ""}; orders ${demo ? "off (demo mode)" : paywall ? `paid to ${paywall.payTo}` : "off (no PAY_TO / CDP_KEY_FILE)"}`

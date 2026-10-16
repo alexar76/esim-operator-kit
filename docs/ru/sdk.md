@@ -10,7 +10,7 @@
 
 | Пакет | Что это | Установка |
 |---|---|---|
-| `@aimarket/esim-rails` | SDK: узел продавца, поставщики, вебхуки, схемы, `esim-rails check` | `npm i @aimarket/esim-rails` после публикации; до тех пор `npm i ./rails` из клона этого репозитория |
+| `@aimarket/esim-rails` | SDK: узел продавца, поставщики, вебхуки, схемы, `esim-rails check` | `npm i @aimarket/esim-rails`; local: `npm i ./rails` |
 | `aimarket-hub` (PyPI) | `aimarket node`: узел федерации, который вносит вас в каталоги хабов | `pip install aimarket-hub==3.15.26` или образ `node/` из кита |
 | JSON-схемы | Контракт для любого языка | `rails/spec/esim-v1/*.schema.json` |
 | Docker-образы | витрина, узел продавца, узел федерации | собираются `docker compose up --build` |
@@ -19,7 +19,7 @@ Node.js 20 или новее. SDK — ESM.
 
 ```js
 import {
-  createNode, ed25519Signer, buildPaywall, fileStore,          // the seller node
+  createNode, ed25519Signer, buildPaywall, fileStore, createBaseReconciler, startReconciliation,          // the seller node
   httpSupplier, esimAccessSupplier, airaloSupplier, esimGoSupplier, createEsimAccessClient,   // suppliers
   createWebhooks, verifyWebhook,                                // your systems
   validate, checkSeller,                                        // the contract
@@ -109,7 +109,7 @@ sequenceDiagram
     K->>Y: GET /profiles?order_ref=…
     Y-->>K: [] … затем [профиль с activation_code]
   end
-  K->>Y: POST /profiles/{id}/cancel   (только если платёж не удалось провести)
+  K->>Y: POST /profiles/{id}/cancel   (при возврате за неиспользованный профиль)
 ```
 
 Минимальный приёмник на Python (Flask), два самых важных эндпоинта:
@@ -150,9 +150,19 @@ def orders():
 ## 4. Узел продавца
 
 ```js
-const node = createNode({
+const store = fileStore("/data/orders.json", fs);
+const reconciler = createBaseReconciler({ rpcUrl: process.env.BASE_RPC || undefined });
+let node;
+const paywall = await buildPaywall({
+  reconciler,
+  cdpKeyFile: "/run/secrets/cdp_api_key.json", payTo: "0xYourBaseAddress", publicUrl: "https://esim.example.com/agents",
+  priceOf: (offerId) => node.priceOf(offerId), onSettleFailure: (p) => node.settleFailed(p),
+  onSettled: (p, result) => node.settled(p, result),
+});
+node = createNode({
+  reconciler,
   supplier,                         // a supplier (section 2) or an eSIM Access client
-  store: fileStore("/data/orders.json", fs),     // or your own {get, put}: order records, never codes
+  store,     // or your own {get, put, all}: order records, never codes
   secret: statusSecret,             // 16+ characters: the key of the buyers' status tokens
   signer: ed25519Signer(pem),       // your node's identity: signs every free answer
   publicUrl: "https://esim.example.com/agents",
@@ -161,10 +171,8 @@ const node = createNode({
   pricing: pricingFromEnv(process.env),   // MARGIN_PCT, MIN_MARGIN_USD and PRICES_FILE; or your own object, below
   sellerName: "My eSIM", productId: "esim-mine", demo: false,
 });
-const paywall = await buildPaywall({
-  cdpKeyFile: "/run/secrets/cdp_api_key.json", payTo: "0xYourBaseAddress", publicUrl: "https://esim.example.com/agents",
-  priceOf: (offerId) => node.priceOf(offerId), onSettleFailure: (p) => node.settleFailed(p),
-});
+
+const worker = startReconciliation(() => node.reconcile());
 node.app.listen(9490);
 ```
 
@@ -174,7 +182,7 @@ node.app.listen(9490);
 
 **Цены.** `pricing` — это `{ marginPct, minMarginUsd, rules }`. Правила берутся из прайс-листа: `parsePriceList(text)` читает CSV или JSON (колонки — в [руководстве оператора](operator-guide.md), шаг 5) и бросает `PriceListError` с номером строки. `priceFor(plan, pricing)` говорит, за сколько продаётся тариф и какое правило назначило цену; правило с `off` убирает тариф из предложений. Без правил все тарифы считаются по формуле, по умолчанию 100 % и $1.00.
 
-**Возвраты.** `POST /refund` с `{esim_tran_no, status_token}` отменяет неиспользованную eSIM (не установлена, нет расхода данных; иначе `409 in_use`) и один раз возвращает цену заказа на адрес плательщика. `createNode({ refunder })` принимает `await buildRefunder({ keyFile, cdpKeyFile, maxUsd, dailyMaxUsd })`: он подписывает перевод EIP-3009 из кошелька возвратов, а фасилитатор проводит его. Без refunder ответ — `status: "due"`. На странице [кейсов](cases.md) — реальный возврат с транзакциями.
+**Возвраты.** `POST /refund` с `{esim_tran_no, status_token}` отменяет неиспользованную eSIM (не установлена, нет расхода данных; иначе `409 in_use`) и один раз возвращает цену заказа на адрес плательщика. `createNode({ refunder })` принимает `await buildRefunder({ keyFile, cdpKeyFile, maxUsd, dailyMaxUsd, budgetStore: store })`: он подписывает перевод EIP-3009 из кошелька возвратов, а фасилитатор проводит его. Без refunder ответ — `status: "due"`. На странице [кейсов](cases.md) — реальный возврат с транзакциями.
 
 **Квитанции.** Доставленный заказ отвечает ещё и `receipt` с `receipt_signature`, а выплаченный возврат — своей квитанцией: это то, что покупатель может принести в хаб как доказательство, что продавец доставил. `receipt` — это `{v: 1, kind, capability: "esim.order@v1", product_id, chain_id: 8453, …}`. При `kind: "delivery"` в нём ещё `payer`, `pay_to`, `nonce` (nonce EIP-3009 платежа), `offer_id` и `at`; при `kind: "refund"` — `payer`, `refund_from`, `refund_nonce`, `delivery_nonce` и `at`. Подпись — Ed25519, base64, над `canonicalJson(receipt)`, её ставит `signer` узла: тот ключ, что показывают `/healthz` и `/listing.json` и что `node.toml` публикует как `provider_pubkey`. Ни одна квитанция не содержит секретов eSIM. У возврата со статусом `due` квитанции нет: показывать пока нечего. Сторона хаба — в [кейсах](cases.md), раздел 11.4.
 
@@ -189,9 +197,9 @@ node.app.listen(9490);
 | `order.refund_due` | оплачено, но поставщик отказал: верните деньги плательщику |
 | `order.underpaid` | пришёл платёж меньше цены |
 | `order.expired` | за 24 часа ничего не пришло |
-| `order.awaiting_payment` | подписанный платёж не удалось провести; заказ снова открыт |
+| `order.settlement_pending` | результат оплаты требует сверки; не списывайте повторно |
 | `agent_order.delivered` | заказ агента выдан |
-| `agent_order.cancelled` | платёж агента не удалось провести; eSIM отменена |
+| `agent_order.settlement_pending` | результат оплаты требует сверки; не списывайте повторно |
 | `agent_order.refunded` | неиспользованная eSIM агента отменена, цена возвращена (`transaction`) |
 | `agent_order.refund_due` | неиспользованная eSIM агента отменена; верните цену на `to` сами |
 
@@ -296,3 +304,9 @@ Conforms to esim.*@v1.
 `esim.*@v1` только растёт: могут появиться новые необязательные поля, существующие сохраняют смысл.
 Изменение, которое ломает клиента, становится `esim.*@v2` и публикуется рядом с v1. SDK следует semver;
 контракт HTTP-поставщика — версия 1.
+
+Для восстановления после потери ответа отправляйте приватный случайный заголовок `X-Esim-Recovery` (32+ символа base64url) с первого запроса заказа. Сохраните его вместе с подписью платежа и повторяйте оба значения. Одних публичных данных блокчейна для получения eSIM недостаточно. Пример создаёт и сохраняет этот секрет автоматически.
+
+Начиная с 0.3.0, готовые узел и магазин автоматически сверяют неопределённые оплаты USDC/Base при запуске и каждые 30 секунд. Они проверяют финализированные данные сети: исходного отправителя, получателя, точную сумму и nonce авторизации; повторного списания нет. Подтверждённый перевод открывает выдачу. Если финализированные данные доказывают, что авторизация истекла неиспользованной или отменена, неоплаченный заказ закрывается; отмена профиля повторяется при сбое поставщика. Ошибки RPC и нефинализированные результаты оставляют заказ в ожидании; финализация может занимать больше интервала проверки. Задайте `BASE_RPC` с поддержкой блоков `finalized` и исторических логов. Старые заказы без сохранённой точки сверки требуют проверки оператором. Неопределённые **переводы возвратов** также требуют проверки оператором и остаются зарезервированными в лимите возвратов. При встраивании SDK вызовите `startReconciliation(() => node.reconcile())`; своё хранилище должно поддерживать `all()`, `get()` и `put()`. Для получения заказа агентом сохраните исходный приватный токен восстановления.
+
+Для продаж укажите архивный RPC в `BASE_RPC`: публичный адрес по умолчанию `https://base.drpc.org` ограничивает частоту запросов и глубину истории, поэтому после долгого простоя сверка может оставаться в ожидании до подключения архивного RPC.

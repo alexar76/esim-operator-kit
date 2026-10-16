@@ -149,7 +149,7 @@ export async function buyEsim(orderUrl, offerId) {
 }
 ```
 
-**What you are charged for.** The seller verifies the payment, buys the eSIM, and settles the payment only after the eSIM exists. A refused order costs nothing. An order still being prepared (`503 allocation_pending`) is not charged yet; the same payment sent again collects the same eSIM, never a second one. A payment that fails to settle cancels the eSIM.
+**What you are charged for.** The seller verifies the payment, buys the eSIM, and settles the payment only after the eSIM exists. A refused order costs nothing. An order still being prepared (`503 allocation_pending`) is not charged yet; the same payment sent again collects the same eSIM, never a second one. An uncertain settlement returns `settlement_pending`: do not pay again; contact the seller.
 
 The answer:
 
@@ -290,3 +290,5 @@ curl -s -X POST https://<seller>/agents/refund -H 'content-type: application/jso
 - Quote with the trip's real needs, and show the traveller the price, data and days before you pay.
 - One `offer_id`, one payment, one order. To buy two eSIMs, make two payments.
 - A seller refreshes its catalogue every 15 minutes. If a price changed after your quote, the 402 asks the new amount, or the wholesaler refuses the order (`409`, nothing charged). The 402 states the amount: an x402 client can refuse to pay more than the quote.
+
+For lost-response recovery, send a private random `X-Esim-Recovery` header (32+ base64url characters) from the first order request. Keep it with the payment signature and reuse both for the retry. On-chain payment data alone cannot recover an eSIM. The example generates and saves it automatically.

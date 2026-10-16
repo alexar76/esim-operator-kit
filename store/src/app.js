@@ -134,7 +134,7 @@ export function createApp({ store, origin, catalog, orders, methods, allow = () 
     return res.status(r.error ? (r.error === "not_found" ? 404 : 409) : 200).set("Cache-Control", "no-store").json(r);
   });
   app.post("/api/orders/:id/claim", demoOff, limited, async (req, res) => {
-    const r = await orders.claim(req.params.id, token(req), String(req.body?.hash || ""));
+    const r = await orders.claim(req.params.id, token(req), String(req.body?.hash || ""), { signature: req.body?.signature });
     return res.status(r.error ? (r.error === "not_found" ? 404 : 409) : 200).set("Cache-Control", "no-store").json(r);
   });
   app.post("/api/orders/:id/ton-message", demoOff, limited, async (req, res) => {

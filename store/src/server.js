@@ -25,6 +25,7 @@ import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import * as fsp from "node:fs/promises";
 import { join } from "node:path";
 import { pricingFromEnv, supplierFromEnv, webhooksFromEnv } from "../../rails/src/config.js";
+import { createBaseReconciler, startReconciliation } from "../../rails/src/reconcile.js";
 import { fileStore } from "../../rails/src/order.js";
 import { createApp, DEMO_OPTIONS } from "./app.js";
 import { createCatalog } from "./catalog.js";
@@ -58,8 +59,9 @@ const facilitator = !demo && env.PAY_TO_EVM && env.CDP_KEY_FILE
   : null;
 const evmChains = (env.EVM_CHAINS || Object.keys(EVM_CHAINS).join(",")).split(",").map(Number).filter((c) => EVM_CHAINS[c]);
 const rpcOverrides = Object.fromEntries(Object.keys(EVM_CHAINS).filter((c) => env[`EVM_RPC_${c}`]).map((c) => [c, env[`EVM_RPC_${c}`]]));
+const reconciler = createBaseReconciler({ rpcUrl: env.BASE_RPC || env.EVM_RPC_8453 || undefined });
 const methods = [
-  usdcBase({ payTo: demo ? "" : env.PAY_TO_EVM || "", facilitator }),
+  usdcBase({ payTo: demo ? "" : env.PAY_TO_EVM || "", facilitator, reconciler }),
   tonPay({ address: demo ? "" : env.PAY_TO_TON || "", apiKey: secretFile(env.TONAPI_KEY_FILE) }),
   tronUsdt({ address: demo ? "" : env.PAY_TO_TRON || "", apiKey: secretFile(env.TRONGRID_KEY_FILE) }),
   solanaUsdc({ address: demo ? "" : env.PAY_TO_SOLANA || "", rpc: env.SOLANA_RPC || undefined, storeName: env.STORE_NAME || "eSIM" }),
@@ -96,6 +98,7 @@ setInterval(async () => {
   watching = true;
   try { await orders.watch(); } catch (err) { console.error(`watch: ${err.message}`); } finally { watching = false; }
 }, 20_000).unref();
+const reconciliationWorker = startReconciliation(() => orders.reconcile());
 const port = Number(env.PORT || 9495);
 app.listen(port, env.HOST || "127.0.0.1", () => console.log(`travel-esim on ${port} (${origin}); payments: ${
   demo ? "off (demo mode)" : methods.filter((m) => m.enabled()).map((m) => m.id).join(", ") || "none"}`));

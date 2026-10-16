@@ -1,6 +1,6 @@
 {
   "name": "@aimarket/esim-rails",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "SDK for eSIM operators on AIMarket rails: a seller node AI agents buy eSIMs from over x402, a supplier interface for your own provisioning system (or eSIM Access), signed webhooks for your CRM and billing, the esim.*@v1 JSON Schemas and a conformance check.",
   "type": "module",
   "license": "MIT",
@@ -63,9 +63,7 @@
     "@x402/extensions": "2.28.0",
     "@x402/svm": "2.28.0",
     "express": "^5.1.0",
-    "viem": "2.57.6"
-  },
-  "devDependencies": {
+    "viem": "2.57.6",
     "@x402/fetch": "2.28.0"
   }
 }

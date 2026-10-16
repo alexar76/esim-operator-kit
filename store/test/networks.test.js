@@ -1,3 +1,5 @@
+import { privateKeyToAccount } from "viem/accounts";
+const claimWallet = privateKeyToAccount("0x" + "01".repeat(32));
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import * as fs from "node:fs/promises";
@@ -72,7 +74,7 @@ function evmNode({ chainId = 56, head = 1000, block = 990, timestamp, receipt })
   };
 }
 const pad = (a) => "0x" + a.toLowerCase().replace(/^0x/, "").padStart(64, "0");
-const transferLog = (token, to, value) => ({ address: token, topics: ["0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef", pad("0x" + "ab".repeat(20)), pad(to)], data: "0x" + BigInt(value).toString(16) });
+const transferLog = (token, to, value) => ({ address: token, topics: ["0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef", pad(claimWallet.address), pad(to)], data: "0x" + BigInt(value).toString(16) });
 
 test("EVM: the transfer the wallet sends, with each token's own decimals", () => {
   assert.equal(tokenUnits(540, 6), "5400000");
@@ -124,11 +126,12 @@ test("EVM orders: a claimed hash delivers once confirmed, and one transaction ne
   assert.equal(a.order.intent.qr, `qr:${a.order.intent.uri}`, "the QR code carries the EIP-681 link");
   const hash = "0x" + "bb".repeat(32);
   assert.equal((await orders.claim(a.order.id, a.token, "nope")).error, "not_a_hash");
-  const first = await orders.claim(a.order.id, a.token, hash);       // mined in 995, head 990: not confirmed
+  const proof = { signature: await claimWallet.signMessage({ message: a.order.intent.claim_message + hash }) };
+  const first = await orders.claim(a.order.id, a.token, hash, proof);       // mined in 995, head 990: not confirmed
   assert.equal(first.order.status, "awaiting_payment");
   assert.equal(first.order.claim.hash, hash);
   const b = await orders.create({ offerId: OFFER_ID, methodId: "evm", asset: { chainId: 42161, token: "USDC" } });
-  assert.equal((await orders.claim(b.order.id, b.token, hash)).error, "used", "a hash claimed by one order cannot pay another");
+  assert.equal((await orders.claim(b.order.id, b.token, hash)).error, "payer_signature_required", "a public pending hash alone reserves nothing");
   head = 1000;
   await orders.watch();
   const done = await orders.get(a.order.id, a.token);
@@ -164,7 +167,7 @@ test("Tron: every open order asks its own exact amount, and is found by it among
 });
 
 test("Solana: a Solana Pay link with a fresh reference, and a payment found by that reference", async () => {
-  const sig = "5j7s1QzqC9JkVk9ZZ7x";
+  let sig = "5j7s1QzqC9JkVk9ZZ7x";
   let txAmount = 5400000n;
   const fetchImpl = async (_u, init) => {
     const { method, params } = JSON.parse(init.body);
@@ -186,6 +189,7 @@ test("Solana: a Solana Pay link with a fresh reference, and a payment found by t
   const pa = await orders.get(a.order.id, a.token);
   assert.equal(pa.status, "delivered");
   assert.equal(pa.payment.ref, `sol:${sig}`);
+  sig = "different-synthetic-transaction";
   txAmount = 100n;
   const b = await orders.create({ offerId: "ES_5_30", methodId: "solana" });
   await orders.watch();

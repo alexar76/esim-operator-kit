@@ -51,7 +51,7 @@ flowchart LR
 
 - 订单在 eSIM Access 一侧就是幂等的（按 `transactionId`）。
 - 订单携带报价时的成本；价格已变动的套餐会被拒绝，而不是被扣款。
-- 付款结算失败时，未使用的配置文件会自动取消并退回你的余额。
+- 未使用的配置文件可在退款时取消。结算结果不确定时需核对，不会自动取消。
 
 ### 2.2 Airalo Partner API
 
@@ -74,7 +74,7 @@ AIRALO_CLIENT_SECRET_FILE=/run/secrets/esim/airalo_client_secret
 
 适配器的做法：调用一次 `POST /v2/token` 并缓存令牌（Airalo 每分钟只允许三次令牌请求）；用 `GET /v2/packages`
 获取目录（仅固定套餐：不限量套餐和充值包不在 v1 范围内；`net_price` 即你的成本）；用 `POST /v2/orders` 下单，
-把付款的交易号作为订单描述；用 `GET /v2/sims/{iccid}` 和 `/usage` 查询状态；付款结算失败时调用 `POST /v2/refund`。
+把付款的交易号作为订单描述；用 `GET /v2/sims/{iccid}` 和 `/usage` 查询状态；为未使用的配置文件退款时调用 `POST /v2/refund`。
 
 销售前须知：
 
@@ -98,7 +98,7 @@ ESIMGO_API_KEY_FILE=/run/secrets/esim/esimgo_api_key
 
 适配器的做法：逐页调用 `GET /catalogue`（`dataAmount` 单位为 MB，`price` 为你组织的币种——必须是美元；不限量
 套餐不在 v1 范围内）；用 `assign: true` 调用 `POST /orders`，返回每张 eSIM 的 ICCID、SM-DP+ 地址和 matching id；
-用 `GET /esims/{iccid}` 和 `/bundles` 查询状态和用量；付款结算失败时调用
+用 `GET /esims/{iccid}` 和 `/bundles` 查询状态和用量；为未使用的配置文件退款时调用
 `DELETE /esims/{iccid}/bundles/{name}?refundToBalance=true`。
 
 销售前须知：
@@ -156,7 +156,7 @@ Node.js 服务可以把任何带有 `catalog`、`order`、`profiles`、`cancel` 
 | `order.underpaid` | 创建客服任务 |
 | `order.expired` | 关闭线索 |
 | `agent_order.delivered` | 记录一笔智能体销售 |
-| `agent_order.cancelled` | 记录一笔被取消的智能体销售 |
+| `agent_order.settlement_pending` | 付款结果需要核对；请勿重复扣款 |
 
 ```bash
 WEBHOOK_URL=https://crm.example.com/hooks/esim

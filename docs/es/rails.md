@@ -42,7 +42,7 @@ flowchart LR
 - **Sin integración por cada plataforma de agentes.** Un contrato, `esim.*@v1`, es lo que cada
   agente usa con cada vendedor.
 - **Dinero sin procesador.** Los USDC en Base llegan a tu monedero cuando la eSIM se entrega. Sin
-  contracargos: un pago se liquida solo tras la entrega, y una liquidación fallida cancela la eSIM.
+  contracargos: un pago se liquida solo tras la entrega, y una liquidación incierta requiere conciliación.
 - **Tus sistemas siguen siendo tuyos.** El kit llama a tu proveedor o sistema de aprovisionamiento
   con cinco endpoints e informa a tu CRM y facturación de cada venta con webhooks firmados.
 - **Las mismas ofertas para personas.** La tienda opcional vende el mismo catálogo con el mismo
@@ -160,8 +160,7 @@ sequenceDiagram
 ```
 
 Si el perfil no está listo en 45 segundos, el agente recibe `503 allocation_pending` y no se liquida
-nada; el mismo pago enviado de nuevo encuentra el mismo pedido. Si la liquidación falla, el nodo
-cancela el perfil y envía `agent_order.cancelled`.
+nada; el mismo pago enviado de nuevo encuentra el mismo pedido. Si la liquidación es incierta, el nodo conserva el perfil y envía `agent_order.settlement_pending`. El proceso automático concilia el pago original con datos finalizados de Base antes de entregar o cancelar.
 
 ### 5.2 Un pedido en la tienda
 
@@ -244,3 +243,25 @@ una duración dados.
 
 **¿Necesito una empresa?** El comerciante eres tú: tus condiciones, tus reembolsos, tus impuestos.
 Mira la guía del operador, sección 13.
+
+## Elige tu ruta de incorporación
+
+| Tu perfil | Punto de entrada | Criterio de éxito |
+|---|---|---|
+| Viajero | Tienda | Código de activación/QR completo tras pagar y acceso posterior mediante el enlace privado del pedido. |
+| Agente de IA externo | [Guía del agente](agent-guide.md) | Descubrir → cotizar → comprar directamente con x402 → guardar entrega y token → consultar estado directamente. `agent-buy.mjs --yes --output ./delivery.json` guarda un archivo privado. |
+| Nuevo revendedor | Kit completo + cuenta mayorista propia | Catálogo demo, configuración de pagos y compra completa. Stripe sirve a la tienda; los agentes pagan directamente con x402 USDC en Base. |
+| Operador con backend propio | Proveedor HTTP (cinco endpoints), SDK JavaScript o contrato público | Una provisión por ID de transacción, consulta de consumo y cancelación del perfil sin usar. Conservas infraestructura y contratos. |
+| Propietario de hub independiente | [Hub propio](own-hub.md), `./onboard.sh --hub` | Identidad, claves y directorio propios; ofertas descubribles desde otro hub. Un nodo vendedor no constituye por sí solo un hub independiente. |
+
+El software es gratuito. El operador paga alojamiento, inventario mayorista, procesamiento de pagos y costes de red. La federación es un canal potencial de ventas, sin garantía de compradores ni ingresos. MCP permite descubrir e invocar herramientas; no sustituye provisión ni pagos.
+
+`./onboard.sh --check` no cambia archivos: comprueba configuración, secretos obligatorios y el servicio vendedor. No realiza pagos ni confirma admisión en la federación. Una ejecución posterior sin `--hub`/`--node` conserva el modo. Solo se publican cotizaciones en los hubs; estado y reembolso con tokens privados se solicitan directamente al vendedor.
+
+Las transferencias EVM requieren una firma del monedero emisor que vincule el hash al pedido; no se admiten retiros de exchanges mediante este método. La tarjeta requiere almacenamiento del navegador para conservar acceso tras Stripe. Guarda el enlace privado.
+
+Desde 0.3.0, el nodo y la tienda incluidos concilian automáticamente los pagos USDC/Base inciertos al iniciar y cada 30 segundos. Comprueban datos finalizados: remitente, destinatario, importe exacto y nonce originales; nunca vuelven a cobrar. Una transferencia confirmada permite la entrega. Una autorización finalizada que caducó sin usarse o fue cancelada cierra el pedido impagado; se reintenta cancelar el perfil si falla el proveedor. Los errores RPC y los resultados no finalizados mantienen el pedido pendiente; la finalidad puede tardar más que el intervalo de consulta. Configura `BASE_RPC` con soporte para bloques `finalized` y registros históricos. Los pedidos antiguos sin punto de control requieren revisión del operador. Las **transferencias de reembolso** inciertas siguen requiriendo revisión y mantienen su reserva presupuestaria. Al integrar el SDK, llama a `startReconciliation(() => node.reconcile())`; el almacén debe implementar `all()`, `get()` y `put()`. Conserva el token privado original para recuperar la entrega del agente.
+
+Las correcciones del 2026-10-15 están en este código fuente, todavía sin publicar en npm ni desplegar. Instala `./rails` desde este checkout para probarlas. El paywall requiere `onSettleFailure` y `onSettled`; consulta el [ejemplo SDK](sdk.md).
+
+Para producción, configura un RPC de archivo en `BASE_RPC`: el servicio público predeterminado `https://base.drpc.org` limita las consultas y el historial; tras una interrupción larga, la recuperación puede quedar pendiente hasta conectar un RPC de archivo.

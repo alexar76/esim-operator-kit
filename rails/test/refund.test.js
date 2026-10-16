@@ -174,7 +174,7 @@ test("the refund is an x402 'exact' transfer to the payer for the order's price,
   const account = privateKeyToAccount(generatePrivateKey());
   const seen = [];
   const facilitator = { verify: async (p, t) => { seen.push({ p, t }); return { isValid: true }; }, settle: async () => ({ success: true, transaction: "0xfeed" }) };
-  const ref = await buildRefunder({ signer: account, facilitator, maxUsd: 1, dailyMaxUsd: 1.5, log: {} });
+  const ref = await buildRefunder({ budgetStore: fileStore(join(await mkdtemp(join(tmpdir(), "refund-budget-")), "ledger.json"), fs), signer: account, facilitator, maxUsd: 1, dailyMaxUsd: 1.5, log: {} });
   const paidBack = await ref.pay({ to: PAYER, usd: "0.90", reference: "T1" });
   const auth = seen[0].p.payload.authorization;
   assert.deepEqual(paidBack, { transaction: "0xfeed", nonce: auth.nonce, from: account.address }, "what a refund receipt names");
@@ -184,6 +184,6 @@ test("the refund is an x402 'exact' transfer to the payer for the order's price,
   await assert.rejects(ref.pay({ to: PAYER, usd: "1.50", reference: "T2" }), /REFUND_MAX_USD/);
   await assert.rejects(ref.pay({ to: PAYER, usd: "0.90", reference: "T3" }), /REFUND_DAILY_MAX_USD/);
   await assert.rejects(ref.pay({ to: account.address, usd: "0.10", reference: "T4" }), /cannot refund itself/);
-  const refused = await buildRefunder({ signer: account, facilitator: { verify: async () => ({ isValid: false, invalidReason: "insufficient_funds" }) }, log: {} });
+  const refused = await buildRefunder({ budgetStore: fileStore(join(await mkdtemp(join(tmpdir(), "refund-budget-")), "ledger.json"), fs), signer: account, facilitator: { verify: async () => ({ isValid: false, invalidReason: "insufficient_funds" }) }, log: {} });
   await assert.rejects(refused.pay({ to: PAYER, usd: "0.10", reference: "T5" }), /insufficient_funds/);
 });

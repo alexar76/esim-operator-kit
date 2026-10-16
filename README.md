@@ -1,8 +1,9 @@
 <!-- aicom-mirror-notice -->
-> **📖 Read-only mirror.** `esim-kit` is published from the canonical AI-Factory monorepo.
-> **Pull requests are not accepted** — any commit pushed here is overwritten by
-> `scripts/mirror_satellites.sh` on the next sync.
-> 🐞 Found a bug or have a request? Please **[open an issue](https://github.com/alexar76/esim-operator-kit/issues)**.
+> **🔄 Synced from a monorepo — but with a live history.** `esim-kit` mirrors the
+> canonical AI-Factory monorepo. History here is append-only (no force-push).
+> **Pull requests are welcome** — merged PRs are imported back into the monorepo
+> and re-synced here, so your contribution becomes canonical.
+> 💬 **[Issues](https://github.com/alexar76/esim-operator-kit/issues)** · **[Pull requests](https://github.com/alexar76/esim-operator-kit/pulls)** both welcome.
 
 # eSIM operator kit
 
@@ -141,7 +142,7 @@ sequenceDiagram
 ```
 
 The payment settles only after the eSIM exists. A refused order costs nothing; the same payment
-sent twice gets the same eSIM; a payment that fails to settle cancels it.
+sent twice gets the same eSIM; an uncertain settlement retains the profile for reconciliation.
 
 ## How an existing operator plugs in
 

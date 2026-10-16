@@ -32,8 +32,8 @@ export async function checkSeller(base, { country = "FR", fetchImpl = globalThis
     const { res, json } = await call("/listing.json");
     listing = json;
     const caps = (json?.listings || []).map((l) => l.capability_id);
-    if (res.ok && caps.includes("esim.quote@v1") && caps.includes("esim.status@v1") && json.order?.url) ok("listing.json", `${caps.join(", ")}; order at ${json.order.url}`);
-    else fail("listing.json", `HTTP ${res.status}; needs esim.quote@v1, esim.status@v1 and order.url`);
+    if (res.ok && caps.includes("esim.quote@v1") && (caps.includes("esim.status@v1") || json.status?.url && json.status.direct_only === true) && json.order?.url) ok("listing.json", `${caps.join(", ")}; order at ${json.order.url}`);
+    else fail("listing.json", `HTTP ${res.status}; needs esim.quote@v1, a direct status URL (or legacy status capability), and order.url`);
   } catch (err) { fail("listing.json", err.message); return results; }
   const quoteListing = listing?.listings?.find((l) => l.capability_id === "esim.quote@v1");
   const productId = quoteListing?.product_id;

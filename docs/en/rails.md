@@ -42,7 +42,7 @@ flowchart LR
 - **No integration per agent platform.** One contract, `esim.*@v1`, is what every agent uses with
   every seller.
 - **Money without a processor.** USDC on Base lands in your wallet when the eSIM is delivered. No
-  chargebacks: a payment settles only after delivery, and a failed settlement cancels the eSIM.
+  chargebacks: a payment settles only after delivery, and an uncertain settlement requires reconciliation.
 - **Your systems stay yours.** The kit calls your supplier or provisioning system through five
   endpoints and tells your CRM and billing about every sale through signed webhooks.
 - **The same offers for people.** The optional storefront sells the same catalogue at the same
@@ -159,8 +159,7 @@ sequenceDiagram
 ```
 
 If the profile is not ready in 45 seconds, the agent gets `503 allocation_pending` and nothing is
-settled; the same payment sent again finds the same order. If settlement fails, the node cancels
-the profile and sends `agent_order.cancelled`.
+settled; the same payment sent again finds the same order. If settlement is uncertain, the node retains the profile and sends `agent_order.settlement_pending`. The worker reconciles the original payment against finalized Base data before delivery or cancellation.
 
 ### 5.2 A storefront order
 
@@ -242,3 +241,25 @@ duration.
 
 **Do I need a company?** You are the merchant: your terms, your refunds, your taxes. See the
 operator guide, section 13.
+
+## Choose your onboarding path
+
+| You are | Start here | What proves it works |
+|---|---|---|
+| A traveller | The storefront | A paid order shows the complete activation code/QR and can be reopened with its private order link. |
+| An external AI agent | [Agent guide](agent-guide.md) | Discover → quote → direct x402 purchase → save the full delivery and status token → direct status. `agent-buy.mjs --yes --output ./delivery.json` writes a private file. |
+| A new reseller | Whole kit + your wholesale account | Demo catalogue first, then configured payments and an end-to-end purchase. Stripe is for the storefront; direct agent orders use x402 USDC on Base. |
+| An operator with an existing backend | HTTP supplier (five endpoints), JavaScript SDK, or the public contract | Your system provisions once per transaction ID, reports usage and cancels unused profiles. You keep your infrastructure and wholesale contracts. |
+| An independent hub owner | [Own hub](own-hub.md), `./onboard.sh --hub` | Your own hub identity, keys and directory; quote discovery works from another hub. A seller node alone is not an independent hub. |
+
+The software is free to deploy and use. Hosting, wholesale inventory, payment processing and network costs remain yours. Federation offers a potential sales channel; it does not guarantee buyers or revenue. MCP helps agents discover and call tools; it does not replace provisioning or payments.
+
+`./onboard.sh --check` is read-only: it checks configuration, required secret files and the running seller. It does not perform a payment or prove federation admission. A later run without `--hub`/`--node` preserves the configured mode. Only quotes are advertised through hubs; status and refund carry private tokens and go directly to the seller.
+
+For EVM token transfers, the sending wallet must sign a message binding the hash to this order. Exchange withdrawals cannot use this method. Card checkout requires browser storage to preserve access after Stripe redirects. Keep the private order link.
+
+Since 0.3.0, the supplied node and storefront automatically reconcile uncertain USDC/Base payments at startup and every 30 seconds. They read finalized chain evidence for the original sender, recipient, exact amount and authorization nonce; they never submit another charge. A confirmed transfer unlocks delivery. A finalized unused authorization past expiry (or cancellation) closes the unpaid order and retries supplier cancellation if needed. RPC errors and unfinalized results remain pending; finality can take longer than the polling interval. Set `BASE_RPC` to a reliable Base RPC that supports `finalized` blocks and historical logs. Older orders without a saved checkpoint require operator review. Uncertain **refund transfers** still require operator review and remain reserved against the refund budget. For an embedded SDK node, call `startReconciliation(() => node.reconcile())`; custom stores must implement `all()` as well as `get()` and `put()`. Keep the original private recovery token to retrieve an agent delivery.
+
+The 2026-10-15 corrections are in this source tree and are not an npm release or a deployment. Install `./rails` from this checkout to test them. The SDK paywall requires both `onSettleFailure` and `onSettled`; see the corrected [SDK example](sdk.md).
+
+For production, configure an archive RPC in `BASE_RPC`: the default public `https://base.drpc.org` has rate and history limits, so recovery after a long outage can stay pending until an archive endpoint is supplied.

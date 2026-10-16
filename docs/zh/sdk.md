@@ -9,7 +9,7 @@
 
 | 软件包 | 内容 | 安装 |
 |---|---|---|
-| `@aimarket/esim-rails` | SDK：卖家节点、供应商、webhooks、schema、`esim-rails check` | 发布后用 `npm i @aimarket/esim-rails`；在此之前从本仓库的克隆中 `npm i ./rails` |
+| `@aimarket/esim-rails` | SDK：卖家节点、供应商、webhooks、schema、`esim-rails check` | `npm i @aimarket/esim-rails`; local: `npm i ./rails` |
 | `aimarket-hub`（PyPI） | `aimarket node`：把你收录到各枢纽的联邦节点 | `pip install aimarket-hub==3.15.26`，或套件的 `node/` 镜像 |
 | JSON Schema | 面向任意语言的契约 | `rails/spec/esim-v1/*.schema.json` |
 | Docker 镜像 | 店铺、卖家节点、联邦节点 | 由 `docker compose up --build` 构建 |
@@ -18,7 +18,7 @@ Node.js 20 或更高版本。SDK 为 ESM。
 
 ```js
 import {
-  createNode, ed25519Signer, buildPaywall, fileStore,          // the seller node
+  createNode, ed25519Signer, buildPaywall, fileStore, createBaseReconciler, startReconciliation,          // the seller node
   httpSupplier, esimAccessSupplier, airaloSupplier, esimGoSupplier, createEsimAccessClient,   // suppliers
   createWebhooks, verifyWebhook,                                // your systems
   validate, checkSeller,                                        // the contract
@@ -105,7 +105,7 @@ sequenceDiagram
     K->>Y: GET /profiles?order_ref=…
     Y-->>K: [] … 然后 [带 activation_code 的配置文件]
   end
-  K->>Y: POST /profiles/{id}/cancel   （仅在付款结算失败时）
+  K->>Y: POST /profiles/{id}/cancel   （在为未使用的配置文件退款时）
 ```
 
 一个最小的 Python 接收端（Flask），包含最重要的两个端点：
@@ -146,9 +146,19 @@ def orders():
 ## 4. 卖家节点
 
 ```js
-const node = createNode({
+const store = fileStore("/data/orders.json", fs);
+const reconciler = createBaseReconciler({ rpcUrl: process.env.BASE_RPC || undefined });
+let node;
+const paywall = await buildPaywall({
+  reconciler,
+  cdpKeyFile: "/run/secrets/cdp_api_key.json", payTo: "0xYourBaseAddress", publicUrl: "https://esim.example.com/agents",
+  priceOf: (offerId) => node.priceOf(offerId), onSettleFailure: (p) => node.settleFailed(p),
+  onSettled: (p, result) => node.settled(p, result),
+});
+node = createNode({
+  reconciler,
   supplier,                         // a supplier (section 2) or an eSIM Access client
-  store: fileStore("/data/orders.json", fs),     // or your own {get, put}: order records, never codes
+  store,     // or your own {get, put, all}: order records, never codes
   secret: statusSecret,             // 16+ characters: the key of the buyers' status tokens
   signer: ed25519Signer(pem),       // your node's identity: signs every free answer
   publicUrl: "https://esim.example.com/agents",
@@ -157,10 +167,8 @@ const node = createNode({
   pricing: pricingFromEnv(process.env),   // MARGIN_PCT, MIN_MARGIN_USD and PRICES_FILE; or your own object, below
   sellerName: "My eSIM", productId: "esim-mine", demo: false,
 });
-const paywall = await buildPaywall({
-  cdpKeyFile: "/run/secrets/cdp_api_key.json", payTo: "0xYourBaseAddress", publicUrl: "https://esim.example.com/agents",
-  priceOf: (offerId) => node.priceOf(offerId), onSettleFailure: (p) => node.settleFailed(p),
-});
+
+const worker = startReconciliation(() => node.reconcile());
 node.app.listen(9490);
 ```
 
@@ -169,7 +177,7 @@ node.app.listen(9490);
 
 **价格。** `pricing` 是 `{ marginPct, minMarginUsd, rules }`。规则来自价目表：`parsePriceList(text)` 读取 CSV 或 JSON（各列见[运营者指南](operator-guide.md)第 5 步），出错时抛出带行号的 `PriceListError`。`priceFor(plan, pricing)` 给出套餐的售价以及定价的规则；`off` 规则会把该套餐从报价中去掉。没有规则时，所有套餐按公式定价，默认 100% 和 1.00 美元。
 
-**退款。** 带 `{esim_tran_no, status_token}` 的 `POST /refund` 会取消未使用的 eSIM（未安装、无流量；否则返回 `409 in_use`），并把订单价款一次性退回付款地址。`createNode({ refunder })` 接受 `await buildRefunder({ keyFile, cdpKeyFile, maxUsd, dailyMaxUsd })`：它从退款钱包签署 EIP-3009 转账，由 facilitator 结算。没有 refunder 时回答为 `status: "due"`。[案例](cases.md)页面有一次带交易记录的真实退款。
+**退款。** 带 `{esim_tran_no, status_token}` 的 `POST /refund` 会取消未使用的 eSIM（未安装、无流量；否则返回 `409 in_use`），并把订单价款一次性退回付款地址。`createNode({ refunder })` 接受 `await buildRefunder({ keyFile, cdpKeyFile, maxUsd, dailyMaxUsd, budgetStore: store })`：它从退款钱包签署 EIP-3009 转账，由 facilitator 结算。没有 refunder 时回答为 `status: "due"`。[案例](cases.md)页面有一次带交易记录的真实退款。
 
 **收据。** 已交付的订单还会返回 `receipt` 和 `receipt_signature`，已支付的退款也会返回自己的收据：这是买家可以交给枢纽、证明卖家已交付的凭据。`receipt` 为 `{v: 1, kind, capability: "esim.order@v1", product_id, chain_id: 8453, …}`。`kind: "delivery"` 时另含 `payer`、`pay_to`、`nonce`（付款的 EIP-3009 nonce）、`offer_id` 和 `at`；`kind: "refund"` 时另含 `payer`、`refund_from`、`refund_nonce`、`delivery_nonce` 和 `at`。签名是对 `canonicalJson(receipt)` 的 Ed25519 签名（base64），由节点的 `signer` 生成：即 `/healthz` 和 `/listing.json` 显示、`node.toml` 以 `provider_pubkey` 公布的那个密钥。收据中不含任何 eSIM 秘密。记为 `due` 的退款没有收据：还没有可出示的转账。枢纽一侧见[案例](cases.md)第 11.4 节。
 
@@ -184,9 +192,9 @@ node.app.listen(9490);
 | `order.refund_due` | 已付款但供应商拒绝：请退款给付款方 |
 | `order.underpaid` | 收到低于价格的付款 |
 | `order.expired` | 24 小时内未收到付款 |
-| `order.awaiting_payment` | 签名付款结算失败；订单重新开放 |
+| `order.settlement_pending` | 付款结果需要核对；请勿重复扣款 |
 | `agent_order.delivered` | 智能体的订单已交付 |
-| `agent_order.cancelled` | 智能体的付款结算失败；eSIM 已取消 |
+| `agent_order.settlement_pending` | 付款结果需要核对；请勿重复扣款 |
 | `agent_order.refunded` | 智能体未使用的 eSIM 已取消，价款已退回（`transaction`） |
 | `agent_order.refund_due` | 智能体未使用的 eSIM 已取消；请自行把价款退给 `to` |
 
@@ -290,3 +298,9 @@ Conforms to esim.*@v1.
 
 `esim.*@v1` 只增不改：可能出现新的可选字段，已有字段保持含义不变。会破坏客户端的变更将成为 `esim.*@v2`，
 与 v1 并列发布。SDK 遵循 semver；HTTP 供应商契约为第 1 版。
+
+如需在响应丢失后恢复交付，从首次下单起发送私密随机请求头 `X-Esim-Recovery`（至少 32 个 base64url 字符），与付款签名一起保存并在重试时重复使用。仅凭链上的公开付款数据无法获取 eSIM。示例会自动生成并保存此秘密值。
+
+从 0.3.0 起，内置节点和商店会在启动时及每 30 秒自动核对结果不明的 USDC/Base 付款。系统核对已最终确认的链上数据，包括原发送方、接收方、准确金额和授权 nonce，绝不重复扣款。确认到账后开放交付；若最终确认的数据证明授权到期未使用或已取消，则关闭未付款订单，并在供应商失败时重试取消配置文件。RPC 错误或尚未最终确认的结果保持等待；最终确认可能超过查询间隔。可通过 `BASE_RPC` 配置支持 `finalized` 区块和历史日志的 Base RPC。没有保存核对检查点的旧订单仍需运营商核查。结果不明的**退款转账**仍需人工核查，并继续占用退款预算。嵌入 SDK 时调用 `startReconciliation(() => node.reconcile())`；自定义存储需实现 `all()`、`get()`、`put()`。智能体必须保留原私密恢复令牌才能找回交付内容。
+
+生产环境应在 `BASE_RPC` 配置归档 RPC。默认公共端点 `https://base.drpc.org` 限制请求频率和历史深度，长时间停机后可能需要接入归档 RPC 才能完成核对。

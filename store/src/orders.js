@@ -6,14 +6,14 @@
 //   awaiting_payment → expired                          (nothing paid within a day)
 //
 // The price is fixed when the order is made and the terms (amount, memo, address) when its payment
-// intent is made. Signed payments (USDC on Base) are delivered before they are settled and cancelled
-// if settlement fails; pushed payments (TON) and cards (Stripe) are delivered after they arrive — so
+// intent is made. Signed payments (USDC on Base) allocate before settlement; uncertain outcomes are
+// held for reconciliation; pushed payments (TON) and cards (Stripe) are delivered after they arrive — so
 // the wholesale balance is checked before an order is accepted at all.
 //
 // The buyer's way back to the eSIM is the order token: only its hash is stored, and the activation
 // code is fetched from the wholesaler when the order page asks, never kept here.
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
-import { fulfil, release, status as profileStatus, transactionIdFor } from "../../rails/src/order.js";
+import { fulfil, release, transactionIdFor, status as profileStatus } from "../../rails/src/order.js";
 import { asSupplier } from "../../rails/src/supplier.js";
 
 const HOLD_MS = 20 * 60_000;           // how long a price and its payment terms hold
@@ -63,12 +63,6 @@ export function createOrders({ db, supplier: configured, railsStore, statusSecre
     };
   }
 
-  async function cancelDelivery(o, ref) {
-    await release({ supplier, store: railsStore, transactionId: transactionIdFor(ref) }).catch((err) =>
-      log.error?.(`could not cancel the profile of order ${o.id}: ${err.code || err.message}`));
-    delete o.delivery;
-  }
-
   async function deliver(o, ref) {
     // The cost the order was quoted at: a plan whose price moved since is refused, not charged.
     const cost = o.cost_usd ?? (o.wholesale_units ? o.wholesale_units / 10_000 : undefined);
@@ -80,7 +74,9 @@ export function createOrders({ db, supplier: configured, railsStore, statusSecre
     return delivery;
   }
 
-  return {
+  // One writer for this store: payment reservation and delivery must not race a watcher or webhook.
+  // The JSON backend supports one server process per data directory (no replicas sharing files).
+  const api = {
     view,
 
     /** A new order for an offer and a method; the price holds for 20 minutes. */
@@ -105,9 +101,12 @@ export function createOrders({ db, supplier: configured, railsStore, statusSecre
       o.intent = m.kind === "redirect" ? null : await m.intent(o, { asset });
       // An exact-amount method (Tron) tells orders apart by amount: no two open orders may ask the same.
       if (o.intent?.exact) {
-        const open = (await db.all()).filter((x) => x.status === "awaiting_payment" && x.method === m.id);
+        const open = (await db.all()).filter((x) => x.method === m.id && now() - x.created_ms <= WATCH_MS + 60_000);
         for (let i = 0; i < 8 && open.some((x) => x.intent?.units === o.intent.units); i++) o.intent = await m.intent(o, { asset });
         if (open.some((x) => x.intent?.units === o.intent.units)) return { error: "temporarily_unavailable" };
+      }
+      if (o.intent?.typed_data?.message?.validBefore) {
+        o.expires_at = Math.min(o.expires_at, Number(o.intent.typed_data.message.validBefore) * 1000);
       }
       // A QR code of the payment link for wallets on another device.
       if (o.intent?.uri && qr) o.intent.qr = await qr(o.intent.uri).catch(() => null);
@@ -131,7 +130,7 @@ export function createOrders({ db, supplier: configured, railsStore, statusSecre
       return out;
     },
 
-    /** Signed methods: verify, deliver, then settle; a failed settlement cancels the profile. */
+    /** Signed methods: verify, deliver, then settle; an uncertain settlement is held for reconciliation. */
     async authorize(id, token, submission) {
       const o = await load(id, token);
       if (!o) return { error: "not_found" };
@@ -141,6 +140,10 @@ export function createOrders({ db, supplier: configured, railsStore, statusSecre
       if (!m || m.kind !== "authorize") return { error: "wrong_method" };
       const v = await m.verify(o, submission);
       if (!v.ok) return { error: v.reason };
+      if (m.prepare) {
+        try { o.reconciliation = await m.prepare(o, v); }
+        catch { return { error: "reconciliation_unavailable", order: view(o) }; }
+      }
       try {
         await deliver(o, v.ref);
       } catch (err) {
@@ -148,16 +151,22 @@ export function createOrders({ db, supplier: configured, railsStore, statusSecre
         await save(o);
         return { error: o.error, order: view(o) };          // nothing settled: the buyer pays nothing
       }
-      const s = await m.settle(o, v);
+      // Durable before money moves. A crash/timeout must never turn into an automatic second charge.
+      o.status = "settlement_pending";
+      o.payment = { ref: v.ref, payer: v.payer, tx: null };
+      await save(o);
+      let s;
+      try { s = await m.settle(o, v); }
+      catch { s = { ok: false, reason: "settlement_unknown" }; }
       if (!s.ok) {
-        // The profile was bought but the money did not move: cancel it (the wholesaler refunds an
-        // unused profile) and leave the order open for another try.
-        await cancelDelivery(o, v.ref);
-        o.status = "awaiting_payment";
-        o.error = `settlement_failed:${s.reason}`;
+        // A failure response can mean "already settled", or a lost response after a transfer.
+        // Keep the profile and reservation for reconciliation; do not cancel or ask the buyer to pay twice.
+        o.error = `settlement_pending:${s.reason}`;
         await save(o);
-        return { error: "settlement_failed", order: view(o) };
+        return { error: "settlement_pending", order: view(o) };
       }
+      o.status = "delivered";
+      delete o.error;
       o.payment = { ref: v.ref, payer: v.payer, tx: s.tx };
       await save(o);
       return { order: view(o) };
@@ -168,7 +177,7 @@ export function createOrders({ db, supplier: configured, railsStore, statusSecre
      * transaction that paid. One transaction pays one order; the watcher keeps checking a claim
      * that is not confirmed yet.
      */
-    async claim(id, token, hash) {
+    async claim(id, token, hash, proof) {
       const o = await load(id, token);
       if (!o) return { error: "not_found" };
       if (o.status !== "awaiting_payment") return { order: view(o) };
@@ -176,16 +185,19 @@ export function createOrders({ db, supplier: configured, railsStore, statusSecre
       if (!m || m.kind !== "claim") return { error: "wrong_method" };
       const h = String(hash || "").trim().toLowerCase();
       if (!/^0x[0-9a-f]{64}$/.test(h)) return { error: "not_a_hash" };
-      const taken = (await db.all()).some((x) => x.id !== o.id && (x.claim?.hash === h || String(x.payment?.ref || "").endsWith(`:${h}`)));
+      const taken = (await db.all()).some((x) => x.id !== o.id && String(x.payment?.ref || "").endsWith(`:${h}`));
       if (taken) return { error: "used" };
-      o.claim = { hash: h, at: now() };
+      const owner = await m.claimOwner(o.intent, h, proof);
+      if (!owner) return { error: "payer_signature_required" };
+      o.claim = { hash: h, at: now(), payer: owner };
       await save(o);
       return this.checkClaim(o);
     },
 
     async checkClaim(o) {
+      if (!o.claim?.payer) { delete o.claim; await save(o); return { error: "payer_signature_required", order: view(o) }; }
       let r;
-      try { r = await method(o.method).verify(o.intent, o.claim.hash, { since: o.created_ms - 10 * 60_000 }); }
+      try { r = await method(o.method).verify(o.intent, o.claim.hash, { since: o.created_ms - 10 * 60_000, payer: o.claim.payer }); }
       catch { return { order: view(o) }; }                       // the network did not answer: try again later
       if (r.status === "pending") { o.claim.confirming = Boolean(r.confirming); await save(o); return { order: view(o) }; }
       if (r.status !== "paid") {
@@ -194,7 +206,12 @@ export function createOrders({ db, supplier: configured, railsStore, statusSecre
         await save(o);
         return { error: reason, order: view(o) };
       }
+      if (r.payer?.toLowerCase() !== o.claim.payer.toLowerCase()) {
+        delete o.claim; await save(o); return { error: "wrong_payer", order: view(o) };
+      }
+      if ((await db.all()).some(x => x.id !== o.id && x.payment?.ref === r.ref)) return { error: "used" };
       o.payment = { ref: r.ref, payer: r.payer, units: r.units };
+      await save(o);
       delete o.claim;
       try { await deliver(o, r.ref); } catch (err) { o.status = "refund_due"; o.error = err.code || "delivery_failed"; }
       await save(o);
@@ -206,6 +223,36 @@ export function createOrders({ db, supplier: configured, railsStore, statusSecre
       const o = await load(id, token);
       if (!o || o.method !== "ton" || o.intent?.asset !== "USDT") return { error: "not_found" };
       return { message: await method("ton").jettonMessage(o.intent, buyer, o.expires_at) };
+    },
+
+    /** Resume uncertain signed payments after a lost response or process restart. No second charge. */
+    async reconcile() {
+      for (const o of (await db.all()).filter(x => x.status === "settlement_pending")) {
+        const m = methods.find(m => m.id === o.method); // Read-only recovery also works when new sales are disabled.
+        if (!m?.reconcile || !o.reconciliation) continue;
+        const r = o.reconciliation.outcome || await m.reconcile(o.reconciliation);
+        if (r.nextBlock) o.reconciliation.nextBlock = r.nextBlock;
+        o.reconciliation.last_check = new Date(now()).toISOString();
+        o.reconciliation.reason = r.reason ?? null;
+        if (r.status === "paid") {
+          o.payment.tx = r.transaction;
+          o.status = "delivered";
+          o.reconciliation.outcome = r;
+          delete o.error;
+          await save(o);
+        } else if (r.status === "unpaid") {
+          // Durable before cancelling. A crash resumes cancellation, not another payment.
+          o.reconciliation.outcome = r;
+          await save(o);
+          try {
+            await release({ supplier, store: railsStore, transactionId: transactionIdFor(o.payment.ref) });
+            delete o.delivery;
+            o.status = "payment_failed";
+            o.error = r.reason;
+          } catch { o.error = "cancellation_pending"; }
+          await save(o);
+        } else { await save(o); }
+      }
     },
 
     /** Pushed methods: look for each open order's payment and deliver the paid ones. */
@@ -227,7 +274,9 @@ export function createOrders({ db, supplier: configured, railsStore, statusSecre
         let found;
         try { found = await method(o.method).find(o.intent, { since: o.created_ms - 60_000 }); } catch { continue; }
         if (found.status === "pending") continue;
+        if (!found.ref || (await db.all()).some(x => x.id !== o.id && x.payment?.ref === found.ref)) continue;
         o.payment = { ref: found.ref, payer: found.payer, units: found.units };
+        await save(o);
         if (found.status === "underpaid") { o.status = "underpaid"; await save(o); continue; }
         try { await deliver(o, found.ref); } catch (err) { o.status = "refund_due"; o.error = err.code || "delivery_failed"; }
         await save(o);
@@ -243,7 +292,9 @@ export function createOrders({ db, supplier: configured, railsStore, statusSecre
       if (paid.error) return { error: paid.error };
       const o = await load(paid.orderId);
       if (!o || o.status !== "awaiting_payment") return { ignored: true };
+      if ((await db.all()).some(x => x.id !== o.id && x.payment?.ref === paid.ref)) return { error: "used" };
       o.payment = { ref: paid.ref };
+      await save(o);
       if (paid.amountCents < o.price_cents) { o.status = "underpaid"; await save(o); return { order: view(o) }; }
       try { await deliver(o, paid.ref); } catch (err) { o.status = "refund_due"; o.error = err.code || "delivery_failed"; }
       await save(o);
@@ -257,17 +308,31 @@ export function createOrders({ db, supplier: configured, railsStore, statusSecre
       return { redirect: (await method("stripe").intent(o, { orderUrl })).redirect };
     },
   };
+  let queue = Promise.resolve();
+  const exposed = { view: api.view, get: api.get.bind(api) };
+  for (const name of ["create", "authorize", "claim", "tonMessage", "watch", "reconcile", "cardPaid", "cardCheckout"]) {
+    exposed[name] = (...args) => {
+      const run = queue.then(() => api[name](...args));
+      queue = run.catch(() => {});
+      return run;
+    };
+  }
+  return exposed;
 }
 
 /** Orders in one JSON file, written whole and atomically. Enough for a shop's first thousands of orders. */
 export function jsonDb(path, fs) {
   let chain = Promise.resolve();
-  const read = async () => { try { return JSON.parse(await fs.readFile(path, "utf8")); } catch { return {}; } };
+  const read = async () => { try {
+    const data = JSON.parse(await fs.readFile(path, "utf8"));
+    if (!data || typeof data !== "object" || Array.isArray(data)) throw new Error("order store must be a JSON object");
+    return data;
+  } catch (err) { if (err.code === "ENOENT") return {}; throw err; } };
   return {
     get: async (id) => (await read())[id] ?? null,
     all: async () => Object.values(await read()),
     put: (id, value) => {
-      chain = chain.then(async () => {
+      chain = chain.catch(() => {}).then(async () => {
         const all = await read();
         all[id] = value;
         await fs.writeFile(`${path}.tmp`, JSON.stringify(all), { mode: 0o600 });

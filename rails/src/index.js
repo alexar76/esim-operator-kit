@@ -22,3 +22,5 @@ export { buildPaywall, BASE_MAINNET } from "./paywall.js";
 export { nodeToml } from "./nodetoml.js";
 export { validate, schemaNames } from "./schema.js";
 export { checkSeller, report } from "./check.js";
+
+export { createBaseReconciler, startReconciliation } from "./reconcile.js";

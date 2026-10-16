@@ -163,8 +163,7 @@ sequenceDiagram
 ```
 
 Si le profil n'est pas prêt en 45 secondes, l'agent reçoit `503 allocation_pending` et rien n'est
-réglé ; le même paiement renvoyé retrouve la même commande. Si le règlement échoue, le nœud annule le
-profil et envoie `agent_order.cancelled`.
+réglé ; le même paiement renvoyé retrouve la même commande. Si le règlement est incertain, le nœud conserve le profil et envoie `agent_order.settlement_pending`. Le processus automatique rapproche le paiement initial avec les données finalisées de Base avant livraison ou annulation.
 
 ### 5.2 Une commande en boutique
 
@@ -247,3 +246,25 @@ fixes d'un volume et d'une durée donnés.
 
 **Faut-il une société ?** Le vendeur, c'est vous : vos conditions, vos remboursements, vos taxes.
 Voir le guide de l'opérateur, section 13.
+
+## Choisir votre parcours
+
+| Votre profil | Point de départ | Critère de réussite |
+|---|---|---|
+| Voyageur | Boutique | Code d’activation/QR complet après paiement et accès ultérieur via le lien privé de commande. |
+| Agent IA externe | [Guide de l’agent](agent-guide.md) | Découvrir → devis → achat direct x402 → sauvegarder livraison et jeton → statut direct. `agent-buy.mjs --yes --output ./delivery.json` écrit un fichier privé. |
+| Nouveau revendeur | Kit complet + compte grossiste personnel | Catalogue démo, configuration des paiements puis achat complet. Stripe sert la boutique ; les agents paient directement via x402 USDC sur Base. |
+| Opérateur avec son backend | Fournisseur HTTP (cinq endpoints), SDK JavaScript ou contrat public | Une livraison par ID de transaction, suivi de consommation et annulation des profils inutilisés. Vous gardez infrastructure et contrats. |
+| Propriétaire d’un hub indépendant | [Votre hub](own-hub.md), `./onboard.sh --hub` | Identité, clés et annuaire propres ; devis découverts depuis un autre hub. Un nœud vendeur seul n’est pas un hub indépendant. |
+
+Le logiciel est gratuit. Hébergement, stock grossiste, traitement des paiements et frais réseau restent à votre charge. La fédération est un canal de vente potentiel, sans garantie de clients ni de revenus. MCP facilite découverte et appels d’outils ; il ne remplace ni fourniture ni paiement.
+
+`./onboard.sh --check` ne modifie rien : il vérifie configuration, fichiers secrets requis et service vendeur. Il ne réalise pas de paiement et ne confirme pas l’admission dans la fédération. Relancer sans `--hub`/`--node` conserve le mode choisi. Seuls les devis sont publiés via les hubs ; statut et remboursement avec jetons privés vont directement au vendeur.
+
+Les transferts EVM exigent une signature du portefeuille émetteur liant le hash à la commande ; les retraits de plateformes ne sont pas acceptés par cette méthode. Le paiement par carte nécessite le stockage du navigateur pour conserver l’accès après Stripe. Gardez le lien privé.
+
+Depuis 0.3.0, le nœud et la boutique fournis rapprochent automatiquement les paiements USDC/Base incertains au démarrage et toutes les 30 secondes. Ils vérifient les données finalisées : expéditeur, destinataire, montant exact et nonce initiaux ; aucun nouveau débit. Un transfert confirmé permet la livraison. Une autorisation expirée inutilisée ou annulée, prouvée par des données finalisées, ferme la commande impayée ; l’annulation du profil est retentée si le fournisseur échoue. Les erreurs RPC et les résultats non finalisés maintiennent l’attente ; la finalité peut prendre plus longtemps que l’intervalle de vérification. Configurez `BASE_RPC` avec les blocs `finalized` et les journaux historiques. Les anciennes commandes sans point de contrôle exigent une vérification par l’opérateur. Les **transferts de remboursement** incertains nécessitent toujours une vérification et restent réservés dans le budget. Pour intégrer le SDK, appelez `startReconciliation(() => node.reconcile())` ; le stockage doit fournir `all()`, `get()` et `put()`. Conservez le jeton privé initial pour récupérer la livraison de l’agent.
+
+Les corrections du 2026-10-15 sont dans ces sources, sans publication npm ni déploiement. Installez `./rails` depuis ce checkout pour les tester. Le paywall exige `onSettleFailure` et `onSettled` ; voir l’[exemple SDK](sdk.md).
+
+En production, configurez un RPC d’archive dans `BASE_RPC` : le service public par défaut `https://base.drpc.org` limite les requêtes et l’historique ; après une longue interruption, la récupération peut rester en attente jusqu’à la connexion d’un RPC d’archive.

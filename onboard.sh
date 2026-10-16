@@ -17,7 +17,7 @@ set -euo pipefail
 cd "$(dirname "$0")"
 
 FEDERATION_HUB="${ONBOARD_FEDERATION_HUB:-https://modelmarket.dev}"
-MODE=node ANNOUNCE=ask CHECK_ONLY=0
+MODE= ANNOUNCE=ask CHECK_ONLY=0 CHECK_ERRORS=0
 for a in "$@"; do
   case "$a" in
     --hub) MODE=hub ;;
@@ -171,7 +171,12 @@ if [ -z "$PRODUCT_ID" ] || [ "$PRODUCT_ID" = "esim-mytravel" ]; then
   [ "$CHECK_ONLY" = 1 ] || { PRODUCT_ID="$(ask "A short id for your offers in the federation" "$guess")"; env_set PRODUCT_ID "$PRODUCT_ID"; }
 fi
 [[ "$PRODUCT_ID" =~ ^[a-z0-9][a-z0-9-]{2,63}$ ]] || fail "PRODUCT_ID must be letters, digits and dashes: $PRODUCT_ID"
-[ -n "$(env_get DEMO_MODE)" ] || env_set DEMO_MODE 1
+[ -n "$MODE" ] || { MODE=node; [ "$(env_get FEDERATION_UPSTREAM)" != hub:9083 ] || MODE=hub; }
+if [ -z "$(env_get DEMO_MODE)" ]; then
+  [ "$CHECK_ONLY" = 0 ] || fail "DEMO_MODE is not set; choose 1 (demo) or 0 (live) explicitly"
+  env_set DEMO_MODE 1
+fi
+case "$(env_get DEMO_MODE)" in 0|1) ;; *) fail "DEMO_MODE must be 0 or 1" ;; esac
 ok "$DOMAIN · $STORE_NAME · $PRODUCT_ID · $( [ "$(env_get DEMO_MODE)" = 1 ] && echo "demo mode (sells nothing yet)" || echo "selling")"
 
 PROXY="$(env_get PROXY)"
@@ -188,7 +193,7 @@ if [ -z "$PROXY" ]; then
       fail "free ports 80 and 443 for the kit's Caddy, or answer yes"
     fi
   fi
-  env_set PROXY "$PROXY"
+  [ "$CHECK_ONLY" = 1 ] || env_set PROXY "$PROXY"
 fi
 case "$PROXY" in
   caddy) front="the kit's Caddy (Let's Encrypt)" ;;
@@ -202,11 +207,11 @@ ip="$(getent ahostsv4 "$DOMAIN" 2>/dev/null | awk 'NR==1{print $1}' || true)"
 
 # ── 3. The wholesaler's keys ────────────────────────────────────────────────────────────────
 step "3. Keys (secrets/, typed in hidden)"
-mkdir -p secrets
+[ "$CHECK_ONLY" = 1 ] || mkdir -p secrets
 SUPPLIER="$(env_get SUPPLIER)"; SUPPLIER="${SUPPLIER:-esimaccess}"
 need_secret() {  # file, prompt
   if [ -s "secrets/$1" ]; then ok "secrets/$1"
-  elif [ "$CHECK_ONLY" = 1 ]; then warn "secrets/$1 is missing"
+  elif [ "$CHECK_ONLY" = 1 ]; then warn "secrets/$1 is missing"; CHECK_ERRORS=$((CHECK_ERRORS + 1))
   else secret_put "$1" "$2" && ok "secrets/$1 written"; fi
 }
 case "$SUPPLIER" in
@@ -214,7 +219,9 @@ case "$SUPPLIER" in
               need_secret esimaccess_secret_key "eSIM Access SecretKey" ;;
   airalo)     need_secret airalo_client_id "Airalo client id"; need_secret airalo_client_secret "Airalo client secret" ;;
   esimgo)     need_secret esimgo_api_key "eSIM Go API key" ;;
-  http)       [ -n "$(env_get SUPPLIER_URL)" ] || fail "SUPPLIER=http needs SUPPLIER_URL in .env (docs: integrations)" ;;
+  http)       [ -n "$(env_get SUPPLIER_URL)" ] || fail "SUPPLIER=http needs SUPPLIER_URL in .env (docs: integrations)"
+              need_secret supplier_secret "Your supplier HTTP shared secret" ;;
+  *)          fail "SUPPLIER must be esimaccess, airalo, esimgo or http" ;;
 esac
 [ -s secrets/cdp_api_key.json ] && ok "secrets/cdp_api_key.json (agents can pay you over x402)" \
   || warn "no secrets/cdp_api_key.json: fine in demo mode; needed to sell to agents (operator guide, step 8)"
@@ -230,7 +237,19 @@ if [ "$CHECK_ONLY" = 0 ]; then
   ok "data/ and secrets/ belong to the containers' user (1000)"
 fi
 
-[ "$CHECK_ONLY" = 1 ] && { step "Check only: nothing was changed."; exit 0; }
+if [ "$CHECK_ONLY" = 1 ]; then
+  [ "$CHECK_ERRORS" = 0 ] || fail "$CHECK_ERRORS required secret(s) missing; nothing changed"
+  $DC config --quiet || fail "docker compose configuration is invalid"
+  BASE="${ONBOARD_URL:-https://$DOMAIN}"
+  health="$(curl -fsS $CURL_K --max-time 10 "$BASE/agents/healthz" || true)"
+  case "$health" in *'"ok":true'*) ;; *) fail "seller health check failed at $BASE/agents/healthz" ;; esac
+  if [ "$(env_get DEMO_MODE)" = 0 ]; then
+    # Health reports actual agent-payment readiness, not just the presence of a key file.
+    case "$health" in *'"paid_orders":true'*) ok "agent payments configured" ;; *) warn "agent payments are off (PAY_TO_EVM / CDP key); check storefront payment methods separately" ;; esac
+  fi
+  step "Checks passed: configuration, required secrets and seller health. No payment was tested. Nothing changed."
+  exit 0
+fi
 
 # ── 5. Store and seller node ────────────────────────────────────────────────────────────────
 step "5. Store, seller node and HTTPS"

@@ -1,6 +1,6 @@
 // node.toml for `aimarket node` (docs/operator-guide.md, step 7), written from the live catalogue.
 //
-// The two free capabilities are described, with `country` as an enum of the ISO codes the catalogue
+// The public quote capability is described, with `country` as an enum of the ISO codes the catalogue
 // covers: agents see what can be bought, and the admission sandbox — which fills a required string
 // with "sandbox" unless the schema names its values — calls esim.quote with a real country (the
 // enum's first) and gets real offers back. The order is not described: every plan has its own
@@ -40,14 +40,7 @@ method = "POST"
 path = "/quote"${key}
 input_schema = { type = "object", required = ["country"], properties = { country = { type = "string", description = "ISO 3166-1 alpha-2 code of the destination", enum = [${ordered.map(q).join(", ")}] }, min_gb = { type = "number" }, min_days = { type = "integer" }, max_usd = { type = "number" }, limit = { type = "integer" } } }
 
-[[capability]]
-id = "esim.status@v1"
-product = ${q(product)}
-name = "eSIM status and usage"
-description = "${demo ? DEMO_NOTE : ""}State, data used and expiry of an eSIM bought from this seller, for the holder of its status token."
-price_usd = 0
-method = "POST"
-path = "/status"${key}
-input_schema = { type = "object", required = ["esim_tran_no", "status_token"], properties = { esim_tran_no = { type = "string" }, status_token = { type = "string" } } }
+# Status and refund carry a private status_token: call the seller directly, never through a hub.
+
 `;
 }

@@ -14,7 +14,7 @@ const LINES = {
   "order.underpaid": (d) => `⚠️ Underpaid ${d.order_id}: ${d.payment?.units ?? "?"} units for $${d.price_usd}`,
   "order.expired": (d) => `⌛ Expired ${d.order_id}`,
   "agent_order.delivered": (d) => `🤖 Agent bought ${d.offer_id} — $${d.price_usd} from ${d.payer}`,
-  "agent_order.cancelled": (d) => `🤖 Agent payment did not settle; eSIM cancelled (${d.payment_ref})`,
+  "agent_order.settlement_pending": (d) => `🤖 Payment needs reconciliation; do not charge again (${d.payment_ref})`,
 };
 
 export function relay({ secret, telegram, slackUrl, fetchImpl = globalThis.fetch, log = console }) {

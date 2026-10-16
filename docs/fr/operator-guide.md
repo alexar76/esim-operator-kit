@@ -203,7 +203,7 @@ qu'utilisent vos acheteurs. L'USDT sur Tron est la façon la plus courante de pa
 
 | Moyen | À renseigner | Comment paie l'acheteur | Comment la vitrine confirme |
 |---|---|---|---|
-| USDC sur Base, sans gas | `PAY_TO_EVM` + `secrets/cdp_api_key.json` | Signe un message dans un portefeuille du navigateur et ne paie pas de gas. | Le facilitateur CDP règle la signature. L'eSIM est livrée d'abord, puis le paiement est réglé ; si le règlement échoue, l'eSIM est annulée. |
+| USDC sur Base, sans gas | `PAY_TO_EVM` + `secrets/cdp_api_key.json` | Signe un message dans un portefeuille du navigateur et ne paie pas de gas. | Le facilitateur CDP règle la signature. L'eSIM est livrée d'abord, puis le paiement est réglé ; un résultat incertain nécessite un rapprochement. |
 | USDC / USDT sur 7 réseaux EVM | `PAY_TO_EVM` (+ `EVM_CHAINS`) | Envoie le virement depuis un portefeuille du navigateur, ou depuis n'importe quel portefeuille ou plateforme d'échange, et colle le hash de la transaction. | Lit le reçu : un transfert de ce jeton vers vous, d'au moins le prix, plus récent que la commande. Attend les confirmations : 3 sur Ethereum et BNB Chain, 10 sur Polygon, 1 ailleurs. Une transaction paie une commande. |
 | USDT sur Tron | `PAY_TO_TRON` (+ `secrets/trongrid_key`) | Envoie exactement le montant affiché, depuis TronLink sur la page ou depuis n'importe quel portefeuille. | Chaque commande demande le prix plus quelques millionièmes de dollar (0,0099 $ de plus au maximum). Ce montant exact identifie la commande parmi vos transferts USDT confirmés. |
 | USDC sur Solana | `PAY_TO_SOLANA` (+ `SOLANA_RPC`) | Ouvre le lien Solana Pay ou scanne son QR code (Phantom, Solflare, Backpack). | Chaque commande a sa propre clé de référence, que le portefeuille ajoute au transfert. La vitrine retrouve la transaction grâce à elle. |
@@ -355,7 +355,7 @@ Lisez les notes de version avant de mettre à jour une boutique qui vend.
 
 ## 12. Commandes des agents
 
-Les agents achètent via `POST /agents/order` (voir le [guide pour les agents](agent-guide.md)). Le nœud vérifie le paiement x402, achète le profil et ne règle qu'une fois le profil créé. Si le règlement échoue, il annule le profil et le prix de gros revient sur votre solde. Les commandes des agents sont enregistrées dans `data/rails/orders.json`, sans codes d'activation. Les USDC arrivent sur `PAY_TO_EVM` sur Base.
+Les agents achètent via `POST /agents/order` (voir le [guide pour les agents](agent-guide.md)). Le nœud vérifie le paiement x402, achète le profil et ne règle qu'une fois le profil créé. Si le règlement est incertain, il conserve le profil pour rapprochement ; ne facturez pas à nouveau. Les commandes des agents sont enregistrées dans `data/rails/orders.json`, sans codes d'activation. Les USDC arrivent sur `PAY_TO_EVM` sur Base.
 
 **Remboursements.** Un agent peut demander le remboursement d'une eSIM qu'il n'a pas installée : `POST /agents/refund` avec le numéro de l'eSIM et le jeton de statut. Le nœud annule l'eSIM chez le grossiste, qui recrédite votre solde, et rend le prix à l'adresse qui a payé. Le remboursement est automatique seulement si vous donnez au nœud un portefeuille de remboursement (`REFUND_KEY_FILE`, plafonné par `REFUND_MAX_USD` et `REFUND_DAILY_MAX_USD`) ; sans lui, le remboursement est enregistré comme dû et le webhook `agent_order.refund_due` vous demande de le payer. Configuration, règles et un vrai remboursement avec ses transactions : [cas réels](cases.md).
 

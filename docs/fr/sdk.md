@@ -10,7 +10,7 @@ Autres documents : [présentation](../../README.fr.md) · [prise en main](rails.
 
 | Paquet | Quoi | Installation |
 |---|---|---|
-| `@aimarket/esim-rails` | Le SDK : nœud vendeur, fournisseurs, webhooks, schémas, `esim-rails check` | `npm i @aimarket/esim-rails` une fois publié ; d'ici là `npm i ./rails` depuis un clone de ce dépôt |
+| `@aimarket/esim-rails` | Le SDK : nœud vendeur, fournisseurs, webhooks, schémas, `esim-rails check` | `npm i @aimarket/esim-rails`; local: `npm i ./rails` |
 | `aimarket-hub` (PyPI) | `aimarket node` : le nœud de fédération qui vous référence sur les hubs | `pip install aimarket-hub==3.15.26`, ou l'image `node/` du kit |
 | Schémas JSON | Le contrat, pour tout langage | `rails/spec/esim-v1/*.schema.json` |
 | Images Docker | boutique, nœud vendeur, nœud de fédération | construites par `docker compose up --build` |
@@ -19,7 +19,7 @@ Node.js 20 ou plus récent. Le SDK est en ESM.
 
 ```js
 import {
-  createNode, ed25519Signer, buildPaywall, fileStore,          // the seller node
+  createNode, ed25519Signer, buildPaywall, fileStore, createBaseReconciler, startReconciliation,          // the seller node
   httpSupplier, esimAccessSupplier, airaloSupplier, esimGoSupplier, createEsimAccessClient,   // suppliers
   createWebhooks, verifyWebhook,                                // your systems
   validate, checkSeller,                                        // the contract
@@ -109,7 +109,7 @@ sequenceDiagram
     K->>Y: GET /profiles?order_ref=…
     Y-->>K: [] … puis [profil avec activation_code]
   end
-  K->>Y: POST /profiles/{id}/cancel   (seulement si un paiement ne se règle pas)
+  K->>Y: POST /profiles/{id}/cancel   (lors du remboursement d’un profil inutilisé)
 ```
 
 Un récepteur Python minimal (Flask), les deux endpoints qui comptent le plus :
@@ -150,9 +150,19 @@ La référence JavaScript avec les cinq endpoints : [rails/examples/operator-bac
 ## 4. Le nœud vendeur
 
 ```js
-const node = createNode({
+const store = fileStore("/data/orders.json", fs);
+const reconciler = createBaseReconciler({ rpcUrl: process.env.BASE_RPC || undefined });
+let node;
+const paywall = await buildPaywall({
+  reconciler,
+  cdpKeyFile: "/run/secrets/cdp_api_key.json", payTo: "0xYourBaseAddress", publicUrl: "https://esim.example.com/agents",
+  priceOf: (offerId) => node.priceOf(offerId), onSettleFailure: (p) => node.settleFailed(p),
+  onSettled: (p, result) => node.settled(p, result),
+});
+node = createNode({
+  reconciler,
   supplier,                         // a supplier (section 2) or an eSIM Access client
-  store: fileStore("/data/orders.json", fs),     // or your own {get, put}: order records, never codes
+  store,     // or your own {get, put, all}: order records, never codes
   secret: statusSecret,             // 16+ characters: the key of the buyers' status tokens
   signer: ed25519Signer(pem),       // your node's identity: signs every free answer
   publicUrl: "https://esim.example.com/agents",
@@ -161,10 +171,8 @@ const node = createNode({
   pricing: pricingFromEnv(process.env),   // MARGIN_PCT, MIN_MARGIN_USD and PRICES_FILE; or your own object, below
   sellerName: "My eSIM", productId: "esim-mine", demo: false,
 });
-const paywall = await buildPaywall({
-  cdpKeyFile: "/run/secrets/cdp_api_key.json", payTo: "0xYourBaseAddress", publicUrl: "https://esim.example.com/agents",
-  priceOf: (offerId) => node.priceOf(offerId), onSettleFailure: (p) => node.settleFailed(p),
-});
+
+const worker = startReconciliation(() => node.reconcile());
 node.app.listen(9490);
 ```
 
@@ -174,7 +182,7 @@ la commande, non.
 
 **Prix.** `pricing` vaut `{ marginPct, minMarginUsd, rules }`. Les règles viennent d'une grille de prix : `parsePriceList(text)` lit du CSV ou du JSON (les colonnes sont dans le [guide de l'opérateur](operator-guide.md), étape 5) et lève `PriceListError` avec le numéro de ligne. `priceFor(plan, pricing)` dit à quel prix un forfait se vend et quelle règle l'a fixé ; une règle `off` retire le forfait des offres. Sans règles, chaque forfait est calculé par la formule, 100 % et 1,00 $ par défaut.
 
-**Remboursements.** `POST /refund` avec `{esim_tran_no, status_token}` annule une eSIM inutilisée (non installée, aucune donnée consommée ; sinon `409 in_use`) et rend une seule fois le prix de la commande à l'adresse qui a payé. `createNode({ refunder })` prend `await buildRefunder({ keyFile, cdpKeyFile, maxUsd, dailyMaxUsd })` : il signe un transfert EIP-3009 depuis le portefeuille de remboursement et le facilitateur le règle. Sans refunder, la réponse est `status: "due"`. La page des [cas réels](cases.md) montre un vrai remboursement avec ses transactions.
+**Remboursements.** `POST /refund` avec `{esim_tran_no, status_token}` annule une eSIM inutilisée (non installée, aucune donnée consommée ; sinon `409 in_use`) et rend une seule fois le prix de la commande à l'adresse qui a payé. `createNode({ refunder })` prend `await buildRefunder({ keyFile, cdpKeyFile, maxUsd, dailyMaxUsd, budgetStore: store })` : il signe un transfert EIP-3009 depuis le portefeuille de remboursement et le facilitateur le règle. Sans refunder, la réponse est `status: "due"`. La page des [cas réels](cases.md) montre un vrai remboursement avec ses transactions.
 
 **Reçus.** Une commande livrée répond aussi avec `receipt` et `receipt_signature`, et un remboursement payé répond avec le sien : ce qu'un acheteur peut apporter à un hub comme preuve que le vendeur a livré. `receipt` vaut `{v: 1, kind, capability: "esim.order@v1", product_id, chain_id: 8453, …}`. Avec `kind: "delivery"` il ajoute `payer`, `pay_to`, `nonce` (le nonce EIP-3009 du paiement), `offer_id` et `at` ; avec `kind: "refund"`, `payer`, `refund_from`, `refund_nonce`, `delivery_nonce` et `at`. La signature est Ed25519, base64, sur `canonicalJson(receipt)`, faite par le `signer` du nœud : la clé que montrent `/healthz` et `/listing.json` et que `node.toml` publie en tant que `provider_pubkey`. Aucun reçu ne contient de secret de l'eSIM. Un remboursement enregistré comme `due` n'en a pas : il n'y a pas encore de transfert à montrer. Le côté du hub est dans les [cas réels](cases.md), section 11.4.
 
@@ -189,9 +197,9 @@ Renseignez `WEBHOOK_URL` et `WEBHOOK_SECRET_FILE` (16+ caractères), ou passez `
 | `order.refund_due` | payé, mais le fournisseur a refusé : remboursez le payeur |
 | `order.underpaid` | un paiement inférieur au prix est arrivé |
 | `order.expired` | rien n'est arrivé en 24 heures |
-| `order.awaiting_payment` | un paiement signé ne s'est pas réglé ; la commande est de nouveau ouverte |
+| `order.settlement_pending` | paiement à rapprocher ; ne facturez pas à nouveau |
 | `agent_order.delivered` | la commande d'un agent a été livrée |
-| `agent_order.cancelled` | le paiement d'un agent ne s'est pas réglé ; l'eSIM a été annulée |
+| `agent_order.settlement_pending` | paiement à rapprocher ; ne facturez pas à nouveau |
 | `agent_order.refunded` | l'eSIM inutilisée d'un agent a été annulée et le prix rendu (`transaction`) |
 | `agent_order.refund_due` | l'eSIM inutilisée d'un agent a été annulée ; rendez vous-même le prix à `to` |
 
@@ -298,3 +306,9 @@ Il n'appelle que les routes gratuites et demande son prix à la commande ; il ne
 `esim.*@v1` ne fait que grandir : de nouveaux champs facultatifs peuvent apparaître, les existants gardent
 leur sens. Un changement qui casse un client devient `esim.*@v2`, publié à côté de v1. Le SDK suit
 semver ; le contrat du fournisseur HTTP est en version 1.
+
+Pour récupérer une livraison après perte de réponse, envoyez un en-tête privé aléatoire `X-Esim-Recovery` (32+ caractères base64url) dès la première requête. Conservez-le avec la signature du paiement et réutilisez les deux. Les données publiques de la chaîne ne suffisent pas. L’exemple génère et sauvegarde ce secret automatiquement.
+
+Depuis 0.3.0, le nœud et la boutique fournis rapprochent automatiquement les paiements USDC/Base incertains au démarrage et toutes les 30 secondes. Ils vérifient les données finalisées : expéditeur, destinataire, montant exact et nonce initiaux ; aucun nouveau débit. Un transfert confirmé permet la livraison. Une autorisation expirée inutilisée ou annulée, prouvée par des données finalisées, ferme la commande impayée ; l’annulation du profil est retentée si le fournisseur échoue. Les erreurs RPC et les résultats non finalisés maintiennent l’attente ; la finalité peut prendre plus longtemps que l’intervalle de vérification. Configurez `BASE_RPC` avec les blocs `finalized` et les journaux historiques. Les anciennes commandes sans point de contrôle exigent une vérification par l’opérateur. Les **transferts de remboursement** incertains nécessitent toujours une vérification et restent réservés dans le budget. Pour intégrer le SDK, appelez `startReconciliation(() => node.reconcile())` ; le stockage doit fournir `all()`, `get()` et `put()`. Conservez le jeton privé initial pour récupérer la livraison de l’agent.
+
+En production, configurez un RPC d’archive dans `BASE_RPC` : le service public par défaut `https://base.drpc.org` limite les requêtes et l’historique ; après une longue interruption, la récupération peut rester en attente jusqu’à la connexion d’un RPC d’archive.

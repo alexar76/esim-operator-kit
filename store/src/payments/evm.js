@@ -1,3 +1,4 @@
+import { recoverMessageAddress } from "viem";
 // USDC and USDT on six EVM networks, paid by an ordinary token transfer and proved by its hash.
 //
 // The buyer's wallet sends `transfer(store, amount)` on the token contract (the page builds the
@@ -72,6 +73,7 @@ export function evmTransfer({ payTo = "", chains = Object.keys(EVM_CHAINS).map(N
       const units = tokenUnits(order.price_cents, decimals);
       const amount = (order.price_cents / 100).toFixed(2);
       return {
+        claim_message: `Claim eSIM payment\nOrder: ${order.id}\nChain: ${asset.chainId}\nToken: ${address.toLowerCase()}\nRecipient: ${payTo.toLowerCase()}\nUnits: ${units}\nTransaction: `,
         method: "evm", chain_id: Number(asset.chainId), chain_name: chain.name, native: chain.native, token: asset.token,
         token_address: address, decimals, to: payTo, units, amount_display: `${amount} ${asset.token}`,
         explorer: chain.explorer, confirmations: chain.confirmations, rpc_public: chain.rpc,
@@ -87,7 +89,13 @@ export function evmTransfer({ payTo = "", chains = Object.keys(EVM_CHAINS).map(N
      * confirmed yet) | failed (reverted) | wrong (not a payment to the store of this token and amount,
      * or older than the order).
      */
-    async verify(intent, hash, { since }) {
+    async claimOwner(intent, hash, proof) {
+      if (!intent.claim_message || !proof?.signature) return null;
+      try { return (await recoverMessageAddress({ message: intent.claim_message + hash.toLowerCase(), signature: proof.signature })).toLowerCase(); }
+      catch { return null; }
+    },
+
+    async verify(intent, hash, { since, payer }) {
       if (!HASH.test(hash || "")) return { status: "wrong", reason: "not_a_hash" };
       const cid = intent.chain_id;
       const receipt = await rpc(cid, "eth_getTransactionReceipt", [hash]);
@@ -95,7 +103,7 @@ export function evmTransfer({ payTo = "", chains = Object.keys(EVM_CHAINS).map(N
       if (receipt.status !== "0x1") return { status: "failed" };
       const to = `0x${word(intent.to)}`;
       const log = (receipt.logs || []).find((l) => String(l.address).toLowerCase() === intent.token_address.toLowerCase()
-        && l.topics?.[0] === TRANSFER && String(l.topics?.[2]).toLowerCase() === to && BigInt(l.data) >= BigInt(intent.units));
+        && l.topics?.[0] === TRANSFER && (!payer || String(l.topics?.[1]).toLowerCase() === `0x${word(payer)}`) && String(l.topics?.[2]).toLowerCase() === to && BigInt(l.data) >= BigInt(intent.units));
       if (!log) return { status: "wrong", reason: "no_transfer_to_store" };
       const block = await rpc(cid, "eth_getBlockByNumber", [receipt.blockNumber, false]);
       if (Number(block?.timestamp) * 1000 < since) return { status: "wrong", reason: "older_than_order" };

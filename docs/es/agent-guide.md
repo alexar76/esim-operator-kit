@@ -150,7 +150,7 @@ export async function buyEsim(orderUrl, offerId) {
 }
 ```
 
-**Por qué se cobra.** El vendedor verifica el pago, compra la eSIM y liquida el pago solo cuando la eSIM existe. Un pedido rechazado no cuesta nada. Un pedido que aún se prepara (`503 allocation_pending`) todavía no se cobra; el mismo pago enviado de nuevo recoge la misma eSIM, nunca una segunda. Un pago que no se liquida cancela la eSIM.
+**Por qué se cobra.** El vendedor verifica el pago, compra la eSIM y liquida el pago solo cuando la eSIM existe. Un pedido rechazado no cuesta nada. Un pedido que aún se prepara (`503 allocation_pending`) todavía no se cobra; el mismo pago enviado de nuevo recoge la misma eSIM, nunca una segunda. Una liquidación incierta devuelve `settlement_pending`: no pagues de nuevo; contacta con el vendedor.
 
 La respuesta:
 
@@ -292,3 +292,5 @@ curl -s -X POST https://<seller>/agents/refund -H 'content-type: application/jso
 - Consulta con las necesidades reales del viaje y muestra al viajero el precio, los datos y los días antes de pagar.
 - Un `offer_id`, un pago, un pedido. Para comprar dos eSIM, haz dos pagos.
 - Un vendedor actualiza su catálogo cada 15 minutos. Si un precio cambió después de tu consulta, el 402 pide el nuevo importe, o el mayorista rechaza el pedido (`409`, nada cobrado). El 402 indica el importe: un cliente x402 puede negarse a pagar más que la consulta.
+
+Para recuperar una entrega tras perder la respuesta, envía un encabezado privado aleatorio `X-Esim-Recovery` (32+ caracteres base64url) desde la primera petición. Guárdalo con la firma del pago y reutiliza ambos. Los datos públicos de la cadena no bastan. El ejemplo genera y guarda este secreto automáticamente.

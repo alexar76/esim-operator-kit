@@ -47,10 +47,10 @@ function fakeSupplier({ balance = 10_000_000, refuse = null } = {}) {
   };
 }
 
-async function shop({ supplier = fakeSupplier(), facilitator, tonFetch, stripeFetch, now = () => Date.now(), events } = {}) {
+async function shop({ supplier = fakeSupplier(), facilitator, tonFetch, stripeFetch, now = () => Date.now(), events, reconciler } = {}) {
   const dir = await mkdtemp(join(tmpdir(), "travel-esim-"));
   const methods = [
-    usdcBase({ payTo: PAY_TO, facilitator, now }),
+    usdcBase({ payTo: PAY_TO, facilitator, now, reconciler }),
     tonPay({ address: STORE_TON, fetchImpl: tonFetch, now }),
     stripeCards({ secretKey: stripeFetch ? "sk_test_x" : "", webhookSecret: stripeFetch ? "whsec_x" : "", fetchImpl: stripeFetch }),
   ];
@@ -78,7 +78,7 @@ test("USDC on Base: the buyer signs USDC's own domain for exactly the price, to 
   assert.equal(order.intent.amount_display, "5.40 USDC");
 });
 
-test("USDC on Base: verified, delivered, then settled — and a payment that does not settle cancels the eSIM", async () => {
+test("USDC on Base: verified, delivered, then settled — and an uncertain settlement retains the eSIM", async () => {
   const seen = [];
   const facilitator = {
     verify: async (p, req) => { seen.push(["verify", p, req]); return { isValid: true }; },
@@ -102,9 +102,9 @@ test("USDC on Base: verified, delivered, then settled — and a payment that doe
   const failing = await shop({ facilitator: { verify: async () => ({ isValid: true }), settle: async () => ({ success: false, errorReason: "nonce_used" }) } });
   const o2 = await failing.orders.create({ offerId: "ES_5_30", methodId: "usdc-base" });
   const r2 = await failing.orders.authorize(o2.order.id, o2.token, signedAuth(o2.order.intent));
-  assert.equal(r2.error, "settlement_failed");
-  assert.equal(failing.supplier.calls.cancel, 1, "the bought profile was cancelled");
-  assert.equal(r2.order.status, "awaiting_payment");
+  assert.equal(r2.error, "settlement_pending");
+  assert.equal(failing.supplier.calls.cancel, 0, "an uncertain payment never cancels the profile");
+  assert.equal(r2.order.status, "settlement_pending");
 });
 
 test("USDC on Base: a refused wholesale order settles nothing", async () => {
@@ -248,12 +248,40 @@ test("the operator's systems hear every status change, without the order's token
   const { orders } = await shop({ facilitator, events: { emit: (type, data) => sent.push({ type, data }) } });
   const { order, token } = await orders.create({ offerId: "ES_5_30", methodId: "usdc-base" });
   await orders.authorize(order.id, token, signedAuth(order.intent));
-  assert.deepEqual(sent.map((e) => e.type), ["order.created", "order.delivered"]);
-  const d = sent[1].data;
+  assert.deepEqual(sent.map((e) => e.type), ["order.created", "order.settlement_pending", "order.delivered"]);
+  const d = sent.at(-1).data;
   assert.equal(d.order_id, order.id);
   assert.equal(d.price_usd, "5.40");
   assert.equal(d.offer_id, "ES_5_30");
   assert.ok(d.esim_tran_no && d.cost_usd > 0, "the operator's own systems get the profile and the cost");
   const all = JSON.stringify(sent);
   assert.ok(!all.includes(token) && !all.includes("LPA:") && !all.includes("status_token"), "no token, no activation code");
+});
+
+
+test("store reconciles pending payments across restart, preserving delivery access and cancelling only proven nonpayment", async () => {
+  for (const status of ['paid', 'unpaid']) {
+    let settles = 0, result = { status: 'pending' };
+    const reconciler = { prepare: async a => ({ ...a, fromBlock: '0x1' }), resolve: async () => result };
+    const facilitator = { verify: async () => ({ isValid: true }), settle: async () => { settles++; throw Error('lost response'); } };
+    const t = await shop({ facilitator, reconciler });
+    try {
+      const { order, token } = await t.orders.create({ offerId: 'ES_5_30', methodId: 'usdc-base' });
+      await t.orders.authorize(order.id, token, signedAuth(order.intent));
+      const method = usdcBase({ payTo: PAY_TO, facilitator: null, reconciler }); // New sales off; old payments still recover.
+      const restarted = createOrders({ db: jsonDb(join(t.dir, 'orders.json'), fs), railsStore: fileStore(join(t.dir, 'rails.json'), fs),
+        supplier: t.supplier, statusSecret: 'store-status-secret-0123456789', methods: [method], offersById: () => null });
+      await restarted.reconcile();
+      assert.equal((await restarted.get(order.id, token)).status, 'settlement_pending');
+      result = { status, transaction: '0xconfirmed', reason: status === 'unpaid' ? 'expired_unused' : undefined };
+      await restarted.reconcile(); await restarted.reconcile();
+      const recovered = await restarted.get(order.id, token);
+      assert.equal(recovered.status, status === 'paid' ? 'delivered' : 'payment_failed');
+      assert.equal(Boolean(recovered.esim?.activation_code), status === 'paid');
+      assert.equal(t.supplier.calls.cancel, status === 'unpaid' ? 1 : 0);
+      assert.equal(settles, 1);
+      await restarted.authorize(order.id, token, signedAuth(order.intent));
+      assert.equal(settles, 1);
+    } finally { await fs.rm(t.dir, { recursive: true, force: true }); }
+  }
 });

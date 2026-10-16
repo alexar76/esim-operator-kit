@@ -54,7 +54,7 @@ the $50 top-up and the test order.
 
 - Orders are idempotent at eSIM Access itself (by `transactionId`).
 - The order carries the cost it was quoted at; a plan whose price moved is refused, not charged.
-- Unused profiles are cancelled and refunded to your balance automatically when a payment fails to settle.
+- Unused profiles can be cancelled during a refund. An uncertain settlement is held for reconciliation, without automatic cancellation.
 
 ### 2.2 Airalo Partner API
 
@@ -79,7 +79,7 @@ What the adapter does: `POST /v2/token` once and keeps the token (Airalo allows 
 requests a minute); `GET /v2/packages` for the catalogue (fixed plans only: unlimited and top-up
 packages are left out of v1; `net_price` is your cost); `POST /v2/orders` with the payment's
 transaction id as the order description; `GET /v2/sims/{iccid}` and `/usage` for status;
-`POST /v2/refund` when a payment fails to settle.
+`POST /v2/refund` during an unused-profile refund.
 
 Know before you sell:
 
@@ -105,7 +105,7 @@ What the adapter does: `GET /catalogue` page by page (`dataAmount` in MB, `price
 organisation's currency — it must be USD; unlimited bundles are left out of v1); `POST /orders` with
 `assign: true`, which returns each eSIM's ICCID, SM-DP+ address and matching id; `GET /esims/{iccid}`
 and `/bundles` for status and usage; `DELETE /esims/{iccid}/bundles/{name}?refundToBalance=true`
-when a payment fails to settle.
+during an unused-profile refund.
 
 Know before you sell:
 
@@ -164,7 +164,7 @@ Every order that changes status is POSTed to `WEBHOOK_URL`, signed:
 | `order.underpaid` | open a support task |
 | `order.expired` | close the lead |
 | `agent_order.delivered` | book an agent sale |
-| `agent_order.cancelled` | note a cancelled agent sale |
+| `agent_order.settlement_pending` | payment outcome needs reconciliation; do not charge again |
 
 ```bash
 WEBHOOK_URL=https://crm.example.com/hooks/esim

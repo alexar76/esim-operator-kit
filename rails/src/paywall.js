@@ -4,13 +4,17 @@
 // The price is dynamic: it is read from the request's offer_id (src/node.js has already refused an
 // unknown one). The middleware verifies the payment, runs the order, settles only when the order
 // answered below 400, and releases the buffered answer — the activation code — only after a
-// successful settlement. When settlement fails, onSettleFailure cancels the delivered profile.
+// successful settlement. An uncertain outcome is recorded by onSettleFailure for reconciliation.
+import { createBaseReconciler } from "./reconcile.js";
 import { readFileSync } from "node:fs";
 
 export const BASE_MAINNET = "eip155:8453";
 
-export async function buildPaywall({ cdpKeyFile, payTo, publicUrl, priceOf, onSettleFailure, log = console }) {
+export async function buildPaywall({ cdpKeyFile, payTo, publicUrl, priceOf, onSettleFailure, onSettled, reconciler = createBaseReconciler(), log = console }) {
   if (!cdpKeyFile || !/^0x[0-9a-fA-F]{40}$/.test(payTo || "")) return null;
+  if (typeof onSettleFailure !== "function" || typeof onSettled !== "function") {
+    throw new Error("buildPaywall requires onSettleFailure and onSettled for durable payment outcomes");
+  }
   const key = JSON.parse(readFileSync(cdpKeyFile, "utf8"));
   const [{ createX402Server }, { paymentMiddlewareFromHTTPServer }] = await Promise.all([
     import("@coinbase/cdp-sdk/x402"),
@@ -46,13 +50,16 @@ export async function buildPaywall({ cdpKeyFile, payTo, publicUrl, priceOf, onSe
   server.resourceServer.onVerifyFailure(async (ctx) => {
     log.warn?.(`payment refused at verification: ${String(ctx.error?.message || "unknown").slice(0, 200)}`);
   });
+  server.resourceServer.onAfterSettle(async (ctx) => {
+    await onSettled?.(ctx.paymentPayload, ctx.result);
+  });
   server.resourceServer.onSettleFailure(async (ctx) => {
     try {
-      const released = await onSettleFailure(ctx.paymentPayload);
-      log.warn?.(`settlement failed (${ctx.error?.message || "unknown"}); profile ${released ? "cancelled" : "not found"}`);
+      await onSettleFailure(ctx.paymentPayload);
+      log.warn?.("settlement requires reconciliation; profile retained and payment retry blocked");
     } catch (err) {
-      log.error?.(`settlement failed and the profile could not be cancelled: ${err.code || err.message}`);
+      log.error?.(`settlement failure could not be recorded: ${err.code || err.message}`);
     }
   });
-  return { middleware: paymentMiddlewareFromHTTPServer(server), payTo };
+  return { middleware: paymentMiddlewareFromHTTPServer(server), payTo, tracksSettlement: true, reconciler };
 }

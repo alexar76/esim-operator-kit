@@ -54,7 +54,7 @@ recharge de 50 $ et la commande test.
 
 - Les commandes sont idempotentes chez eSIM Access lui-même (par `transactionId`).
 - La commande porte le coût auquel l'offre a été faite ; un forfait dont le prix a bougé est refusé, pas facturé.
-- Les profils inutilisés sont annulés et remboursés sur votre solde automatiquement quand un paiement ne se règle pas.
+- Les profils inutilisés peuvent être annulés lors d’un remboursement. Un règlement incertain nécessite un rapprochement, sans annulation automatique.
 
 ### 2.2 Airalo Partner API
 
@@ -79,7 +79,7 @@ Ce que fait l'adaptateur : `POST /v2/token` une fois, puis il garde le jeton (Ai
 demandes de jeton par minute) ; `GET /v2/packages` pour le catalogue (forfaits fixes uniquement : les
 forfaits illimités et les recharges ne sont pas en v1 ; `net_price` est votre coût) ; `POST /v2/orders`
 avec l'id de transaction du paiement en description de commande ; `GET /v2/sims/{iccid}` et `/usage`
-pour le statut ; `POST /v2/refund` quand un paiement ne se règle pas.
+pour le statut ; `POST /v2/refund` lors du remboursement d’un profil inutilisé.
 
 À savoir avant de vendre :
 
@@ -105,7 +105,7 @@ Ce que fait l'adaptateur : `GET /catalogue` page par page (`dataAmount` en Mo, `
 de votre organisation — elle doit être l'USD ; les forfaits illimités ne sont pas en v1) ;
 `POST /orders` avec `assign: true`, qui renvoie pour chaque eSIM l'ICCID, l'adresse SM-DP+ et le
 matching id ; `GET /esims/{iccid}` et `/bundles` pour le statut et la consommation ;
-`DELETE /esims/{iccid}/bundles/{name}?refundToBalance=true` quand un paiement ne se règle pas.
+`DELETE /esims/{iccid}/bundles/{name}?refundToBalance=true` lors du remboursement d’un profil inutilisé.
 
 À savoir avant de vendre :
 
@@ -164,7 +164,7 @@ Chaque commande qui change de statut est envoyée en POST à `WEBHOOK_URL`, sign
 | `order.underpaid` | ouvrir une tâche de support |
 | `order.expired` | clore le prospect |
 | `agent_order.delivered` | enregistrer une vente à un agent |
-| `agent_order.cancelled` | noter une vente à un agent annulée |
+| `agent_order.settlement_pending` | paiement à rapprocher ; ne facturez pas à nouveau |
 
 ```bash
 WEBHOOK_URL=https://crm.example.com/hooks/esim

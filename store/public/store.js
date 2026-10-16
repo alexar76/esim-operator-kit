@@ -221,6 +221,10 @@
     if (o.method === "stripe") {
       var c = h("button", { type: "button", text: ui.continue });
       c.addEventListener("click", function () {
+        try {
+          localStorage.setItem("order:" + o.id, token);
+          if (localStorage.getItem("order:" + o.id) !== token) throw new Error("storage unavailable");
+        } catch (e) { return fail(ui.storageRequired); }
         c.disabled = true;
         api("/api/orders/" + o.id + "/checkout", { method: "POST", token: token, body: { lang: D.lang } }).then(function (r) {
           if (r.body.redirect) location.href = r.body.redirect; else fail(ui.errors.generic);
@@ -255,8 +259,17 @@
       .catch(function (e) { fail((e && e.message && e.message.length < 140) ? e.message : ui.errors.generic); });
   }
   function claim(o, hash, fail) {
-    busy = ui.confirming; lastDrawn = ""; render(o);
-    api("/api/orders/" + o.id + "/claim", { method: "POST", token: token, body: { hash: String(hash || "").trim() } }).then(function (r) {
+    if (!window.ethereum) return fail(ui.noEvm);
+    hash = String(hash || "").trim().toLowerCase();
+    if (!/^0x[0-9a-f]{64}$/.test(hash)) return fail(ui.hashErr.not_a_hash || ui.errors.generic);
+    busy = ui.signing; lastDrawn = ""; render(o);
+    window.ethereum.request({ method: "eth_requestAccounts" }).then(function (accounts) {
+      var message = o.intent.claim_message + hash;
+      var hexMessage = "0x" + Array.from(new TextEncoder().encode(message), function (b) { return b.toString(16).padStart(2, "0"); }).join("");
+      return window.ethereum.request({ method: "personal_sign", params: [hexMessage, accounts[0]] });
+    }).then(function (signature) {
+      return api("/api/orders/" + o.id + "/claim", { method: "POST", token: token, body: { hash: hash, signature: signature } });
+    }).then(function (r) {
       if (r.body.error) return fail(ui.hashErr[r.body.error] || ui.errors.generic);
       busy = null; lastDrawn = ""; load();
     }).catch(function () { fail(ui.errors.generic); });
@@ -306,7 +319,7 @@
       });
     }).then(function (r) {
       busy = null; lastDrawn = "";
-      if (r.status === 200) return load();
+      if (r.status === 200 || r.body.order && r.body.order.status === "settlement_pending") return load();
       fail(ui.errors[r.body.error] || ui.errors.generic);
     }).catch(function (e) { fail((e && e.message && e.message.length < 140) ? e.message : ui.errors.generic); });
   }
@@ -346,7 +359,7 @@
       var sig = o.status + "|" + (busy || "") + "|" + (o.claim ? o.claim.hash + o.claim.confirming : "");
       if (sig !== lastDrawn) { lastDrawn = sig; render(o); }
       // Pushed payments are found by the store; a claimed EVM transfer is confirmed by it: keep looking.
-      if (o.status === "awaiting_payment" && (o.method === "ton" || o.method === "tron" || o.method === "solana" || o.claim)) poll();
+      if (o.status === "settlement_pending" || o.status === "awaiting_payment" && (o.method === "ton" || o.method === "tron" || o.method === "solana" || o.claim)) poll();
     });
   }
   function poll() { clearTimeout(timer); timer = setTimeout(load, 5000); }

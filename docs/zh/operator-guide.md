@@ -200,7 +200,7 @@ docker compose exec -T rails node scripts/catalog.mjs FR ES IT US JP TH
 
 | 方式 | 需要设置 | 买家如何付款 | 店铺如何确认 |
 |---|---|---|---|
-| Base 上免 gas 的 USDC | `PAY_TO_EVM` + `secrets/cdp_api_key.json` | 在浏览器钱包中签名一条消息，不付 gas。 | 由 CDP facilitator 结算签名。先交付 eSIM，再结算付款；如果结算失败，eSIM 会被取消。 |
+| Base 上免 gas 的 USDC | `PAY_TO_EVM` + `secrets/cdp_api_key.json` | 在浏览器钱包中签名一条消息，不付 gas。 | 由 CDP facilitator 结算签名。先交付 eSIM，再结算付款；结算结果不确定时需要核对。 |
 | 7 条 EVM 链上的 USDC / USDT | `PAY_TO_EVM`（+ `EVM_CHAINS`） | 从浏览器钱包发起转账，或从任意钱包或交易所转账后粘贴交易哈希。 | 读取交易回执：该代币转给你、金额不低于价格、时间晚于订单。等待确认数：Ethereum 和 BNB Chain 3 个，Polygon 10 个，其他 1 个。一笔交易只支付一个订单。 |
 | Tron 上的 USDT | `PAY_TO_TRON`（+ `secrets/trongrid_key`） | 用页面上的 TronLink 或任意钱包，发送页面显示的精确金额。 | 每个订单要求的金额是价格加上几百万分之一美元（最多多出 0.0099 美元）。这个精确金额在你已确认的 USDT 转账中标识出该订单。 |
 | Solana 上的 USDC | `PAY_TO_SOLANA`（+ `SOLANA_RPC`） | 打开 Solana Pay 链接或扫描其二维码（Phantom、Solflare、Backpack）。 | 每个订单有自己的引用密钥，钱包会把它加入转账。店铺据此找到交易。 |
@@ -347,7 +347,7 @@ docker compose --profile federation up -d --build node    # 如果你运行联�
 
 ## 12. 智能体的订单
 
-智能体通过 `POST /agents/order` 购买（见[智能体指南](agent-guide.md)）。节点验证 x402 付款、购买配置文件，并且只在配置文件创建后才结算。如果结算失败，节点会取消配置文件，批发价退回你的余额。智能体的订单记录在 `data/rails/orders.json` 中，不含激活码。USDC 会到达你在 Base 上的 `PAY_TO_EVM`。
+智能体通过 `POST /agents/order` 购买（见[智能体指南](agent-guide.md)）。节点验证 x402 付款、购买配置文件，并且只在配置文件创建后才结算。结算结果不确定时，节点保留配置文件以核对付款；请勿重复扣款。智能体的订单记录在 `data/rails/orders.json` 中，不含激活码。USDC 会到达你在 Base 上的 `PAY_TO_EVM`。
 
 **退款。** 智能体可以为未安装的 eSIM 申请退款：用 eSIM 编号和状态令牌调用 `POST /agents/refund`。节点在批发商处取消 eSIM（批发商会退回你的余额），并把价款退回付款地址。只有在你给节点配置退款钱包时才会自动退款（`REFUND_KEY_FILE`，上限为 `REFUND_MAX_USD` 和 `REFUND_DAILY_MAX_USD`）；否则退款记为待付，`agent_order.refund_due` webhook 会提醒你支付。配置、规则以及带交易记录的真实退款见[案例](cases.md)。
 

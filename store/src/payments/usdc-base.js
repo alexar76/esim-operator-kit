@@ -1,6 +1,6 @@
 // USDC on Base, paid by signature: the buyer signs an EIP-3009 TransferWithAuthorization in any EVM
 // wallet (no ETH needed for gas), the storefront verifies it with the facilitator, delivers the
-// eSIM, and only then settles. A settlement that fails cancels the profile it bought.
+// eSIM, and only then settles. An uncertain settlement is held for reconciliation.
 //
 // The requirements are the x402 `exact` terms our seller node's 402 carries (esim-rails), so the same
 // facilitator (Coinbase CDP) verifies and settles both.
@@ -12,7 +12,7 @@ export const BASE = { network: "eip155:8453", chainId: 8453, name: "Base" };
 const ADDRESS = /^0x[0-9a-fA-F]{40}$/;
 const HEX32 = /^0x[0-9a-fA-F]{64}$/;
 
-export function usdcBase({ payTo, facilitator, now = () => Date.now() }) {
+export function usdcBase({ payTo, facilitator, reconciler = null, now = () => Date.now() }) {
   if (payTo && !ADDRESS.test(payTo)) throw new Error("payTo must be an EVM address");
   const requirements = (order) => ({
     scheme: "exact",
@@ -76,6 +76,11 @@ export function usdcBase({ payTo, facilitator, now = () => Date.now() }) {
       if (String(a.to).toLowerCase() !== payTo.toLowerCase() || String(a.value) !== req.amount) {
         return { ok: false, reason: "wrong_terms" };
       }
+      const expected = order.intent?.typed_data?.message;
+      if (!expected || a.nonce.toLowerCase() !== expected.nonce.toLowerCase()
+          || String(a.validBefore) !== expected.validBefore || String(a.validAfter ?? "0") !== expected.validAfter) {
+        return { ok: false, reason: "wrong_terms" };
+      }
       const payment = {
         x402Version: 2,
         accepted: req,
@@ -90,6 +95,10 @@ export function usdcBase({ payTo, facilitator, now = () => Date.now() }) {
       if (!res?.isValid) return { ok: false, reason: res?.invalidReason || "invalid_payment" };
       return { ok: true, ref: `usdc-base:${a.from.toLowerCase()}:${a.nonce.toLowerCase()}`, payer: a.from, payment };
     },
+
+    prepare: reconciler ? (order, verified) => reconciler.prepare(verified.payment.payload.authorization,
+      { to: payTo, value: requirements(order).amount }) : null,
+    reconcile: reconciler ? checkpoint => reconciler.resolve(checkpoint) : null,
 
     /** Move the money: only after the eSIM was delivered. */
     async settle(order, verified) {

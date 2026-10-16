@@ -150,7 +150,7 @@ export async function buyEsim(orderUrl, offerId) {
 }
 ```
 
-**Ce qui est facturé.** Le vendeur vérifie le paiement, achète l'eSIM et ne règle le paiement qu'une fois l'eSIM créée. Une commande refusée ne coûte rien. Une commande encore en préparation (`503 allocation_pending`) n'est pas encore facturée ; le même paiement renvoyé récupère la même eSIM, jamais une seconde. Un paiement qui ne se règle pas annule l'eSIM.
+**Ce qui est facturé.** Le vendeur vérifie le paiement, achète l'eSIM et ne règle le paiement qu'une fois l'eSIM créée. Une commande refusée ne coûte rien. Une commande encore en préparation (`503 allocation_pending`) n'est pas encore facturée ; le même paiement renvoyé récupère la même eSIM, jamais une seconde. Un règlement incertain renvoie `settlement_pending` : ne payez pas à nouveau ; contactez le vendeur.
 
 La réponse :
 
@@ -292,3 +292,5 @@ curl -s -X POST https://<seller>/agents/refund -H 'content-type: application/jso
 - Demandez des offres selon les vrais besoins du voyage, et montrez au voyageur le prix, les données et la durée avant de payer.
 - Un `offer_id`, un paiement, une commande. Pour acheter deux eSIM, faites deux paiements.
 - Un vendeur rafraîchit son catalogue toutes les 15 minutes. Si un prix a changé après votre demande, le 402 réclame le nouveau montant, ou le grossiste refuse la commande (`409`, rien de facturé). Le 402 indique le montant : un client x402 peut refuser de payer plus que l'offre.
+
+Pour récupérer une livraison après perte de réponse, envoyez un en-tête privé aléatoire `X-Esim-Recovery` (32+ caractères base64url) dès la première requête. Conservez-le avec la signature du paiement et réutilisez les deux. Les données publiques de la chaîne ne suffisent pas. L’exemple génère et sauvegarde ce secret automatiquement.

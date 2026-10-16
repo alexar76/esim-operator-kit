@@ -7,11 +7,12 @@
 // - The activation code (LPA string) and QR link go to the payer in the answer and are never
 //   stored, logged or signed into anything public. The node keeps the order and profile numbers;
 //   the payer gets a status token (an HMAC of the profile number) and can read the profile again.
-// - Delivered before paid: the node settles the payment only after the profile exists. When the
-//   settlement fails, release() cancels the profile — unused profiles are refunded by the supplier.
+// - Delivered before paid: the node settles the payment only after the profile exists. An uncertain
+//   settlement retains the profile for reconciliation; it is never cancelled on a timeout alone.
 // - A refund is the payer's to ask for, with the status token, while the eSIM is unused: refund()
 //   cancels the profile at the supplier and pays the price back to the address that paid it (refund.js),
 //   or records it as due for the operator when the node has no refund wallet.
+import { resolve } from "node:path";
 import { createHash, createHmac, timingSafeEqual } from "node:crypto";
 import { SupplierError, asSupplier } from "./supplier.js";
 
@@ -89,6 +90,9 @@ export async function fulfil({ supplier, client, store, secret, offer, paymentRe
                priceUsd: offer.price?.usd ?? null };
     await store.put(transactionId, record);
   }
+  if (record.offerId !== offer.offer_id || record.released || record.refund) {
+    throw Object.assign(new Error("payment belongs to a different or closed order"), { code: "order_closed" });
+  }
   const known = profileIdOf(record);
   const profile = known
     ? (await sup.profiles({ profileId: known })).find((x) => x && x.activationCode)
@@ -110,6 +114,7 @@ export async function fulfil({ supplier, client, store, secret, offer, paymentRe
 export async function release({ supplier, client, store, transactionId }) {
   const record = await store.get(transactionId);
   if (!profileIdOf(record ?? {})) return false;
+  if (record.released) return true;
   await asSupplier(supplier ?? client).cancel({ profileId: profileIdOf(record) });
   await store.put(transactionId, { ...record, released: true });
   return true;
@@ -143,6 +148,7 @@ export async function refund({ supplier, client, store, secret, esimTranNo, toke
 async function refundOnce({ supplier, store, transactionId, esimTranNo, refunder, now }) {
   let record = await store.get(transactionId);
   if (!record) throw fail("not_found", "no order of this node bought that profile");
+  if (record.settlement && record.settlement.status !== "settled") throw fail("settlement_pending", "reconcile the payment before refunding");
   // Once per order. A payment that failed is not tried again by itself: its transfer may still have
   // landed, so the operator checks the chain first.
   if (record.refund && (record.refund.status !== "due" || record.refund.attempted)) return record.refund;
@@ -207,13 +213,19 @@ export async function status({ supplier, client, secret, esimTranNo, token }) {
 export function fileStore(path, fs) {
   let chain = Promise.resolve();
   const read = async () => {
-    try { return JSON.parse(await fs.readFile(path, "utf8")); } catch { return {}; }
+    try {
+      const data = JSON.parse(await fs.readFile(path, "utf8"));
+      if (!data || typeof data !== "object" || Array.isArray(data)) throw new Error("order store must be a JSON object");
+      return data;
+    } catch (err) { if (err.code === "ENOENT") return {}; throw err; }
   };
   return {
+    lockKey: resolve(path),
+    all: async () => Object.values(await read()),
     get: async (id) => (await read())[id] ?? null,
     put: (id, record) => {
       const { activation_code: _a, ac: _b, qr_code_url: _c, ...safe } = record;
-      chain = chain.then(async () => {
+      chain = chain.catch(() => {}).then(async () => {
         const all = await read();
         all[id] = safe;
         await fs.writeFile(`${path}.tmp`, JSON.stringify(all), { mode: 0o600 });

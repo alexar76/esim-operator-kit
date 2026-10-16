@@ -81,8 +81,10 @@ test("esim.quote answers as a hub provider: signed over the request it answers, 
   try {
     const listing = await (await t.call("/listing.json")).json();
     const pubkey = listing.listings[0].provider_pubkey;
-    assert.deepEqual(listing.listings.map((l) => l.capability_id), ["esim.quote@v1", "esim.status@v1"]);
+    assert.deepEqual(listing.listings.map((l) => l.capability_id), ["esim.quote@v1"]);
     assert.equal(listing.listings[0].invoke_url, "https://seller.example/esim/quote/invoke");
+    assert.equal(listing.status.direct_only, true);
+    assert.equal(listing.status.url, "https://seller.example/esim/status");
     assert.equal(listing.order.url, "https://seller.example/esim/order");
     const body = { capability_id: "esim.quote@v1", product_id: "esim-rails", input: { country: "ES", min_gb: 1 } };
     const res = await t.call("/quote/invoke", body);
@@ -113,9 +115,9 @@ test("an order: unknown offers are refused before a price, unpaid gets the offer
     const again = (await (await t.call("/order", { offer_id: "ES_5_30" }, { "payment-signature": paymentHeader("11") })).json()).result;
     assert.equal(again.esim_tran_no, got.esim_tran_no);
     assert.equal(t.supplier.calls.order, 1, "the same payment ordered once");
-    // The same payment naming another offer finds the same order: one payment, one profile.
-    const other = (await (await t.call("/order", { offer_id: "SI_5_30" }, { "payment-signature": paymentHeader("11") })).json()).result;
-    assert.equal(other.esim_tran_no, got.esim_tran_no);
+    // A payment cannot be re-labelled as a different offer.
+    const other = await t.call("/order", { offer_id: "SI_5_30" }, { "payment-signature": paymentHeader("11") });
+    assert.equal(other.status, 409);
     assert.ok(!(await readFile(t.storePath, "utf8")).includes("LPA:"), "no activation code on disk");
     const st = await t.call("/status/invoke", { input: { esim_tran_no: got.esim_tran_no, status_token: got.status_token } });
     assert.equal(st.status, 200);
@@ -124,7 +126,7 @@ test("an order: unknown offers are refused before a price, unpaid gets the offer
   } finally { await t.close(); }
 });
 
-test("a refused order is not charged, a node without a wallet takes no orders, a failed settlement cancels the profile", async () => {
+test("a refused order is not charged, a node without a wallet takes no orders, an uncertain settlement preserves the profile", async () => {
   const refused = await serve({ supplier: fakeSupplier({ refuse: "200005" }) });
   try {
     const res = await refused.call("/order", { offer_id: "ES_5_30" }, { "payment-signature": paymentHeader() });
@@ -140,8 +142,8 @@ test("a refused order is not charged, a node without a wallet takes no orders, a
     await t.call("/order", { offer_id: "ES_5_30" }, { "payment-signature": paymentHeader("22") });
     const payload = JSON.parse(Buffer.from(paymentHeader("22"), "base64").toString());
     assert.equal(await t.node.settleFailed(payload), true);
-    assert.equal(t.supplier.calls.cancel, 1);
-    assert.equal((await fileStore(t.storePath, fs).get(transactionIdFor(paymentRefOf(payload)))).released, true);
+    assert.equal(t.supplier.calls.cancel, 0);
+    assert.equal((await fileStore(t.storePath, fs).get(transactionIdFor(paymentRefOf(payload)))).settlement.status, "pending");
     assert.equal(await t.node.settleFailed({}), false);
   } finally { await t.close(); }
 });

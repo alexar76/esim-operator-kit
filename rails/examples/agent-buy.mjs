@@ -7,11 +7,12 @@
 //
 //   node examples/agent-buy.mjs TR --hub https://modelmarket.dev --key-file ~/wallet.json [--yes] [--refund]
 //   node examples/agent-buy.mjs https://<seller>/agents TR --key-file ~/wallet.json [--yes]      (one seller)
-//   options: --min-gb 1  --days 7  --max-usd 1  --no-share (keep the purchase from the hub)
+//   options: --min-gb 1  --days 7  --max-usd 1  --output ./delivery.json  --no-share (keep the purchase from the hub)
 //
 // The key comes from --key-file ({"private_key": "0x…"}) or AGENT_PRIVATE_KEY and is never printed.
 // Without --yes it only quotes. The activation code is the traveller's secret: printed shortened.
-import { readFileSync } from "node:fs";
+import { randomBytes } from "node:crypto";
+import { readFileSync, openSync, writeSync, ftruncateSync, fsyncSync, closeSync } from "node:fs";
 import { wrapFetchWithPaymentFromConfig } from "@x402/fetch";
 import { ExactEvmScheme } from "@x402/evm";
 import { privateKeyToAccount } from "viem/accounts";
@@ -19,7 +20,7 @@ import { privateKeyToAccount } from "viem/accounts";
 const argv = process.argv.slice(2);
 const opt = (k, d) => { const i = argv.indexOf(`--${k}`); return i >= 0 ? argv[i + 1] : d; };
 const flag = (k) => argv.includes(`--${k}`);
-const VALUE_OPTIONS = new Set(["hub", "key-file", "min-gb", "days", "max-usd"]);
+const VALUE_OPTIONS = new Set(["hub", "key-file", "min-gb", "days", "max-usd", "output"]);
 const positional = argv.filter((a, i) => !a.startsWith("--") && !(argv[i - 1]?.startsWith("--") && VALUE_OPTIONS.has(argv[i - 1].slice(2))));
 const sellerArg = positional.find((a) => /^https?:\/\//.test(a));
 const country = (positional.find((a) => /^[A-Za-z]{2}$/.test(a)) || "").toUpperCase();
@@ -66,6 +67,17 @@ console.log(`order at ${q.order.url}`);
 if (Number(offer.price.usd) > maxUsd) { console.error(`above --max-usd ${maxUsd}`); process.exit(1); }
 if (!flag("yes")) { console.log("\nquote only: add --yes to pay"); process.exit(0); }
 
+// Reserve a new private output file BEFORE paying. Never overwrite an earlier delivery or follow a symlink.
+const output = opt("output", `esim-delivery-${Date.now()}.json`);
+const outputFd = openSync(output, "wx", 0o600);
+const recoveryToken = randomBytes(32).toString("base64url");
+const checkpoint = (data) => {
+  const text = JSON.stringify({ seller: q.order.url, offer_id: offer.offer_id, recovery_token: recoveryToken, ...data }, null, 2);
+  ftruncateSync(outputFd, 0);
+  writeSync(outputFd, text, 0, "utf8");
+  fsyncSync(outputFd);
+};
+checkpoint({ status: "purchase_started" });
 // 2. Pay over x402 from the agent's own wallet.
 const keyFile = opt("key-file", "");
 const key = keyFile ? String(JSON.parse(readFileSync(keyFile.replace(/^~/, process.env.HOME), "utf8")).private_key || "") : process.env.AGENT_PRIVATE_KEY || "";
@@ -75,7 +87,10 @@ console.log(`payer    ${account.address}`);
 let paidHeaders = null;   // the same payment for a retry: a new one would be a second order
 const keepPayment = (input, init) => {
   const req = new Request(input, init);
-  if (req.headers.has("PAYMENT-SIGNATURE")) paidHeaders = new Headers(req.headers);
+  if (req.headers.has("PAYMENT-SIGNATURE")) {
+    paidHeaders = new Headers(req.headers);
+    checkpoint({ status: "payment_submitted", payment_signature: req.headers.get("PAYMENT-SIGNATURE") });
+  }
   return fetch(req);
 };
 const payingFetch = wrapFetchWithPaymentFromConfig(keepPayment, {
@@ -83,7 +98,7 @@ const payingFetch = wrapFetchWithPaymentFromConfig(keepPayment, {
   spendControls: { maxAmountPerPayment: `$${maxUsd}` },
 });
 const body = JSON.stringify({ offer_id: offer.offer_id });
-let res = await payingFetch(q.order.url, { method: "POST", headers: { "content-type": "application/json" }, body });
+let res = await payingFetch(q.order.url, { method: "POST", headers: { "content-type": "application/json", "X-Esim-Recovery": recoveryToken }, body });
 for (let i = 0; i < 6 && res.status === 503 && paidHeaders; i++) {
   console.log("allocating… retrying with the same payment");
   await new Promise((r) => setTimeout(r, 1000 * Number(res.headers.get("retry-after") || 20)));
@@ -99,6 +114,9 @@ if (res.status === 402) {
 const answer = await res.json();
 if (!res.ok) { console.error(`${res.status} ${answer.error}: ${answer.message}`); process.exit(1); }
 const d = answer.result;
+checkpoint({ status: "delivered", delivery: d });
+closeSync(outputFd);
+console.log(`saved      ${output} (private: activation code and status token)`);
 let paidTx = null;
 try { paidTx = JSON.parse(Buffer.from(res.headers.get("payment-response"), "base64").toString("utf8")).transaction; } catch { /* none */ }
 console.log(`\ndelivered  esim_tran_no ${d.esim_tran_no} · iccid ${d.iccid} · apn ${d.apn}`);
