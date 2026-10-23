@@ -319,7 +319,7 @@
       });
     }).then(function (r) {
       busy = null; lastDrawn = "";
-      if (r.status === 200 || r.body.order && r.body.order.status === "settlement_pending") return load();
+      if (r.status === 200 || r.body.order && ["procurement_pending", "settlement_pending"].includes(r.body.order.status)) return load();
       fail(ui.errors[r.body.error] || ui.errors.generic);
     }).catch(function (e) { fail((e && e.message && e.message.length < 140) ? e.message : ui.errors.generic); });
   }
@@ -359,7 +359,7 @@
       var sig = o.status + "|" + (busy || "") + "|" + (o.claim ? o.claim.hash + o.claim.confirming : "");
       if (sig !== lastDrawn) { lastDrawn = sig; render(o); }
       // Pushed payments are found by the store; a claimed EVM transfer is confirmed by it: keep looking.
-      if (o.status === "settlement_pending" || o.status === "awaiting_payment" && (o.method === "ton" || o.method === "tron" || o.method === "solana" || o.claim)) poll();
+      if (["procurement_pending", "settlement_pending"].includes(o.status) || o.status === "awaiting_payment" && (o.method === "ton" || o.method === "tron" || o.method === "solana" || o.claim)) poll();
     });
   }
   function poll() { clearTimeout(timer); timer = setTimeout(load, 5000); }

@@ -18,6 +18,9 @@
       "enum": [
         "order.created",
         "order.awaiting_payment",
+        "order.procurement_pending",
+        "order.settlement_pending",
+        "order.payment_failed",
         "order.delivered",
         "order.refund_due",
         "order.underpaid",

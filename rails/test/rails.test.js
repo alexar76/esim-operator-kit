@@ -147,7 +147,7 @@ test("a refused order buys nothing; a slow allocation is reported, not settled, 
   const a = await tempStore();
   await assert.rejects(fulfil({ client: refused.client, store: a.store, secret: "s", offer: OFFER, paymentRef: "p", ...fast }),
                        (e) => e.code === "200005");
-  assert.equal(await a.store.get(transactionIdFor("p")), null);
+  assert.equal((await a.store.get(transactionIdFor("p"))).procurement, "rejected");
   const slow = fakeSupplier({ allocateAfter: 1000 });
   const b = await tempStore();
   let t = 0;

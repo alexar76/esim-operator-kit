@@ -240,13 +240,15 @@ export function createNode({
       if (record.released || record.refund) return refuse(res, 409, "order_closed", "this eSIM was cancelled or refunded");
       if (record.offerId !== String(inputOf(req).offer_id || "")) return refuse(res, 409, "payment_conflict", "this payment belongs to another offer");
       if (record.settlement.status === "unpaid") return refuse(res, 409, "payment_not_received", "this authorization cannot pay; the order is closed");
-      if (record.settlement.status !== "settled") return refuse(res, 409, "settlement_pending", "payment outcome needs reconciliation; do not pay again");
+      if (!["settled", "procurement_pending"].includes(record.settlement.status)) return refuse(res, 409, "settlement_pending", "payment outcome needs reconciliation; do not pay again");
       // Payment signatures/authorization nonces can become public on chain. They are NOT a recovery secret.
       if (!record.recoveryHash || record.recoveryHash !== req.recoveryHash) {
         return refuse(res, 409, "recovery_required", "use the private X-Esim-Recovery value from the original request");
       }
-      req.paidReplay = record.settlement;
-      req.recoveredOffer = record.offer;
+      if (record.settlement.status === "settled") {
+        req.paidReplay = record.settlement;
+        req.recoveredOffer = record.offer;
+      }
     }
     return next();
   });
@@ -277,8 +279,13 @@ export function createNode({
           checkpoint = await settlementReader.prepare(payload.payload?.authorization, { to: paywall.payTo, value: usdcUnits(req.offer.price.usd) });
         } catch { return refuse(res, 503, "reconciliation_unavailable", "payment recovery is unavailable; nothing was charged, try later"); }
       }
-      const { delivery } = await fulfil({ supplier, store, secret, offer: req.offer, paymentRef, maxWaitMs: orderWaitMs });
       const { _cost_usd: _c, ...offer } = req.offer;
+      const recovery = paywall?.tracksSettlement && !req.paidReplay ? {
+        offer, paymentHash: req.paymentHash, recoveryHash: req.recoveryHash,
+        settlement: { status: "procurement_pending", payTo: paywall.payTo, at: new Date(now()).toISOString(),
+          ...(checkpoint ? { reconciliation: checkpoint } : {}) },
+      } : null;
+      const { delivery } = await fulfil({ supplier, store, secret, offer: req.offer, paymentRef, maxWaitMs: orderWaitMs, recovery });
       // What a buyer may show a hub: this seller delivered the order paid with this authorization.
       const [payer, nonce] = paymentRef.split(":");
       const payTo = req.paidReplay?.payTo || paywall?.payTo;
@@ -356,7 +363,7 @@ export function createNode({
       inFlight.set(ref, lock);
       try {
         const record = await store.get(candidate.transactionId), s = record?.settlement;
-        if (!s?.reconciliation || !["pending", "unpaid"].includes(s.status) || record.released) continue;
+        if (!s?.reconciliation || !["procurement_pending", "pending", "unpaid"].includes(s.status) || record.released) continue;
         const r = s.reconciliation.outcome || await settlementReader.resolve(s.reconciliation);
         await changeState(async () => {
           const latest = await store.get(record.transactionId);
@@ -366,10 +373,15 @@ export function createNode({
           await store.put(record.transactionId, { ...latest, settlement: { ...latest.settlement, reconciliation: checkpoint,
             ...(r.status === "unpaid" ? { status: "unpaid" } : {}) } });
           if (r.status === "paid") {
+            if (!latest.profileId && !latest.esimTranNo) {
+              await fulfil({ supplier, store, secret,
+                offer: { ...latest.offer, _cost_usd: latest.costUsd }, paymentRef: ref, maxWaitMs: orderWaitMs });
+            }
             await recordSettled({ payload: { authorization: checkpoint } }, { success: true, transaction: r.transaction, network: "eip155:8453", payer: checkpoint.from });
           } else if (r.status === "unpaid") {
-            await release({ supplier, store, transactionId: record.transactionId });
-            events.emit("agent_order.cancelled", { payment_ref: ref, reason: r.reason });
+            if (await release({ supplier, store, transactionId: record.transactionId })) {
+              events.emit("agent_order.cancelled", { payment_ref: ref, reason: r.reason });
+            }
           }
         });
       } catch { log.error?.("payment reconciliation deferred; durable state retained"); }

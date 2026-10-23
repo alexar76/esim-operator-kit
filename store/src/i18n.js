@@ -97,6 +97,7 @@ const en = {
   status: {
     settlement_pending: "Checking the original payment automatically. Do not pay again. This page updates when confirmation is available; contact support with the order number if it remains pending.",
     payment_failed: "This authorization did not pay and the eSIM was cancelled. You can place a new order.",
+    procurement_pending: "Your eSIM is still being prepared. We are checking this order automatically; do not pay again.",
     awaiting_payment: "Waiting for payment",
     delivered: "Ready to install",
     underpaid: "The payment was smaller than the price. Contact us with the order number.",
@@ -210,6 +211,7 @@ const ru = {
   status: {
     settlement_pending: "Автоматически проверяем исходный платёж. Не платите повторно. Страница обновится после подтверждения; если ожидание затянулось, сообщите поддержке номер заказа.",
     payment_failed: "Оплата по этой авторизации не прошла, eSIM отменена. Можно создать новый заказ.",
+    procurement_pending: "eSIM ещё готовится. Проверяем этот заказ автоматически; не платите повторно.",
     awaiting_payment: "Ждём оплату",
     delivered: "Готова к установке",
     underpaid: "Платёж меньше цены. Напишите нам с номером заказа.",
@@ -323,6 +325,7 @@ const es = {
   status: {
     settlement_pending: "Verificamos automáticamente el pago original. No vuelvas a pagar. La página se actualizará al confirmarse; si la espera continúa, contacta con soporte con el número de pedido.",
     payment_failed: "Esta autorización no realizó el pago y la eSIM se canceló. Puedes crear un nuevo pedido.",
+    procurement_pending: "Tu eSIM sigue preparándose. Comprobamos este pedido automáticamente; no vuelvas a pagar.",
     awaiting_payment: "Esperando el pago",
     delivered: "Lista para instalar",
     underpaid: "El pago fue menor que el precio. Escríbenos con el número de pedido.",
@@ -436,6 +439,7 @@ const fr = {
   status: {
     settlement_pending: "Vérification automatique du paiement initial. Ne payez pas à nouveau. La page sera actualisée après confirmation ; si l’attente persiste, contactez le support avec le numéro de commande.",
     payment_failed: "Cette autorisation n’a pas réglé le paiement et l’eSIM a été annulée. Vous pouvez créer une nouvelle commande.",
+    procurement_pending: "Votre eSIM est en préparation. Nous vérifions cette commande automatiquement ; ne payez pas à nouveau.",
     awaiting_payment: "En attente du paiement",
     delivered: "Prête à installer",
     underpaid: "Le paiement était inférieur au prix. Contactez-nous avec le numéro de commande.",
@@ -549,6 +553,7 @@ const zh = {
   status: {
     settlement_pending: "正在自动核对原付款，请勿重复付款。确认后页面会自动更新；若长时间等待，请向客服提供订单号。",
     payment_failed: "此授权未付款，eSIM 已取消。您可以创建新订单。",
+    procurement_pending: "您的 eSIM 仍在准备中。我们会自动核对此订单，请勿重复付款。",
     awaiting_payment: "等待付款",
     delivered: "可以安装",
     underpaid: "付款金额低于价格。请带订单号联系我们。",

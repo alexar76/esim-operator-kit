@@ -78,20 +78,33 @@ async function allocated(supplier, orderRef, { maxWaitMs, sleep, now }) {
  * `supplier` is a supplier.js Supplier (an eSIM Access client is wrapped; `client` is its old name).
  */
 export async function fulfil({ supplier, client, store, secret, offer, paymentRef,
-                               maxWaitMs = 45_000, sleep = sleepMs, now = () => Date.now() }) {
+                               maxWaitMs = 45_000, sleep = sleepMs, now = () => Date.now(), recovery = null }) {
   const sup = asSupplier(supplier ?? client);
   const transactionId = transactionIdFor(paymentRef);
   let record = await store.get(transactionId);
   if (!record) {
-    const placed = await sup.order({ transactionId, planId: offer.offer_id, costUsd: offer._cost_usd });
-    // Who paid and how much: what a refund pays back, to whom (an address, the payment's own `from`).
-    record = { transactionId, orderRef: placed.orderRef, offerId: offer.offer_id, at: new Date(now()).toISOString(),
+    // A durable intent precedes the external purchase. If its response is lost,
+    // recovery uses the same supplier transaction id, never a second purchase.
+    record = { ...recovery, transactionId, orderRef: null, procurement: "ordering", costUsd: offer._cost_usd,
+               offerId: offer.offer_id, at: new Date(now()).toISOString(),
                payer: String(paymentRef).split(":")[0] || null, nonce: String(paymentRef).split(":")[1] || null,
                priceUsd: offer.price?.usd ?? null };
     await store.put(transactionId, record);
   }
   if (record.offerId !== offer.offer_id || record.released || record.refund) {
     throw Object.assign(new Error("payment belongs to a different or closed order"), { code: "order_closed" });
+  }
+  if (!orderRefOf(record)) {
+    try {
+      const placed = await sup.order({ transactionId, planId: record.offerId, costUsd: record.costUsd });
+      record = { ...record, orderRef: placed.orderRef, procurement: "ordered" };
+      await store.put(transactionId, record);
+    } catch (err) {
+      if (err instanceof SupplierError && !err.retryable) {
+        await store.put(transactionId, { ...record, procurement: "rejected" });
+      }
+      throw err;
+    }
   }
   const known = profileIdOf(record);
   const profile = known
@@ -112,10 +125,29 @@ export async function fulfil({ supplier, client, store, secret, offer, paymentRe
 
 /** Undo a delivered order whose payment did not settle: cancel the unused profile (refunded by the supplier). */
 export async function release({ supplier, client, store, transactionId }) {
-  const record = await store.get(transactionId);
-  if (!profileIdOf(record ?? {})) return false;
+  let record = await store.get(transactionId);
+  if (!record) return false;
   if (record.released) return true;
-  await asSupplier(supplier ?? client).cancel({ profileId: profileIdOf(record) });
+  const sup = asSupplier(supplier ?? client);
+  if (record.procurement === "rejected") {
+    await store.put(transactionId, { ...record, released: true });
+    return true;
+  }
+  if (!orderRefOf(record) && !profileIdOf(record)) {
+    // Resolve a lost supplier response by its idempotency key. Only called
+    // after finalized proof that the buyer's payment cannot land.
+    const placed = await sup.order({ transactionId, planId: record.offerId, costUsd: record.costUsd });
+    record = { ...record, orderRef: placed.orderRef, procurement: "ordered" };
+    await store.put(transactionId, record);
+  }
+  const profiles = await sup.profiles(profileIdOf(record)
+    ? { profileId: profileIdOf(record) } : { orderRef: orderRefOf(record) });
+  const profile = profiles.find(p => p?.profileId);
+  if (!profile) return false; // Allocation still pending: recovery must keep trying.
+  if (!["CANCEL", "CANCELLED", "CANCELED"].includes(profile.state)) {
+    await sup.cancel({ profileId: profile.profileId });
+  }
+  record = { ...record, profileId: profile.profileId };
   await store.put(transactionId, { ...record, released: true });
   return true;
 }

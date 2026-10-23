@@ -248,7 +248,7 @@ test("the operator's systems hear every status change, without the order's token
   const { orders } = await shop({ facilitator, events: { emit: (type, data) => sent.push({ type, data }) } });
   const { order, token } = await orders.create({ offerId: "ES_5_30", methodId: "usdc-base" });
   await orders.authorize(order.id, token, signedAuth(order.intent));
-  assert.deepEqual(sent.map((e) => e.type), ["order.created", "order.settlement_pending", "order.delivered"]);
+  assert.deepEqual(sent.map((e) => e.type), ["order.created", "order.procurement_pending", "order.settlement_pending", "order.delivered"]);
   const d = sent.at(-1).data;
   assert.equal(d.order_id, order.id);
   assert.equal(d.price_usd, "5.40");

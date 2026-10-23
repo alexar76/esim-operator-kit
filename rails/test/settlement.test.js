@@ -24,14 +24,19 @@ test('refund budget survives a real file reopen and uncertain transfers stay res
   } finally { await fs.rm(dir, { recursive: true, force: true }); }
 });
 
-async function serve(failSettlement = false, recovery = false) {
+async function serve(failSettlement = false, recovery = false, slow = false) {
   const dir = await fs.mkdtemp(join(tmpdir(), 'esim-settlement-'));
   const events = []; let orders = 0, cancels = 0, attempts = 0, node, cancelFails = false;
+  let allocationReady = !slow;
+  const purchased = new Map();
   const supplier = {
     catalog: async () => [{ id: 'TEST', name: 'Test', cost_usd: 0.1, countries: ['TR'], data_bytes: 1073741824, days: 7 }],
     balance: async () => ({ usd: 100 }),
-    order: async () => { orders++; return { orderRef: 'ORDER123' }; },
-    profiles: async () => [{ profileId: 'PROFILE123', orderRef: 'ORDER123', activationCode: 'LPA:1$fake$secret', state: 'NEW' }],
+    order: async ({ transactionId }) => {
+      if (!purchased.has(transactionId)) { orders++; purchased.set(transactionId, { orderRef: 'ORDER123' }); }
+      return purchased.get(transactionId);
+    },
+    profiles: async () => allocationReady ? [{ profileId: 'PROFILE123', orderRef: 'ORDER123', activationCode: 'LPA:1$fake$secret', state: 'NEW' }] : [],
     cancel: async () => { cancels++; if (cancelFails) { cancelFails = false; throw Error("supplier unavailable"); } }
   };
   const paywall = { tracksSettlement: true, payTo: '0x' + '12'.repeat(20), middleware(req, res, next) {
@@ -50,13 +55,14 @@ async function serve(failSettlement = false, recovery = false) {
   } };
   let outcome = { status: "pending" };
   const reconciler = recovery ? { prepare: async auth => ({ ...auth, fromBlock: "0x1" }), resolve: async () => outcome } : null;
-  const makeNode = (overrides = {}) => createNode({ reconciler, supplier, store: fileStore(join(dir, 'orders.json'), fs), secret: 'test-secret-at-least-16-chars',
+  const makeNode = (overrides = {}) => createNode({ reconciler, supplier, store: fileStore(join(dir, 'orders.json'), fs), secret: 'test-secret-at-least-16-chars', orderWaitMs: 0,
     signer: ed25519Signer(), publicUrl: 'https://audit.invalid', paywall, log: {}, events: { emit: type => events.push(type) }, ...overrides });
   node = makeNode();
   const listen = () => new Promise(resolve => { const s = node.app.listen(0, "127.0.0.1", () => resolve(s)); });
   let server = await listen();
   const header = Buffer.from(JSON.stringify({ payload: { authorization: { from: '0x' + 'ab'.repeat(20), nonce: '0x' + '11'.repeat(32) }, signature: 'synthetic' } })).toString('base64');
   return { events,
+    finishAllocation: () => { allocationReady = true; },
     failCancelOnce: () => { cancelFails = true; },
     confirm: () => node.settled(JSON.parse(Buffer.from(header, "base64").toString()), { success: true, transaction: "0xconfirmed" }),
     reconcile: async result => { outcome = result; await node.reconcile(); },
@@ -69,6 +75,40 @@ async function serve(failSettlement = false, recovery = false) {
     close: async () => { await new Promise(resolve => server.close(resolve)); await fs.rm(dir, { recursive: true, force: true }); }
   };
 }
+
+test('abandoned agent allocation is recovered and cancelled from finalized nonpayment', async () => {
+  const t = await serve(false, true, true);
+  try {
+    assert.equal((await t.call()).body.error, 'allocation_pending');
+    assert.equal(t.counts().orders, 1);
+    await t.restart();
+    await t.reconcile({ status: 'pending' });
+    assert.equal(t.counts().cancels, 0);
+    await t.reconcile({ status: 'unpaid', reason: 'expired_unused' });
+    assert.equal(t.counts().cancels, 0, 'no profile exists to cancel yet');
+    t.finishAllocation();
+    await t.reconcile({ status: 'unpaid', reason: 'expired_unused' });
+    await t.reconcile({ status: 'unpaid', reason: 'expired_unused' });
+    assert.equal(t.counts().orders, 1);
+    assert.equal(t.counts().cancels, 1);
+    assert.deepEqual(t.events, ['agent_order.cancelled']);
+  } finally { await t.close(); }
+});
+
+test('late paid agent allocation is delivered after restart without a second settlement', async () => {
+  const t = await serve(false, true, true);
+  try {
+    assert.equal((await t.call()).body.error, 'allocation_pending');
+    await t.restart();
+    t.finishAllocation();
+    await t.reconcile({ status: 'paid', transaction: '0xconfirmed' });
+    const result = await t.call();
+    assert.equal(result.status, 200);
+    assert.equal(result.body.result.activation_code, 'LPA:1$fake$secret');
+    assert.deepEqual(t.counts(), { orders: 1, cancels: 0, attempts: 1 });
+    assert.deepEqual(t.events, ['agent_order.delivered']);
+  } finally { await t.close(); }
+});
 
 test('agent retries reuse confirmed delivery, bind the original signed payload, and emit delivery once', async () => {
   const t = await serve();

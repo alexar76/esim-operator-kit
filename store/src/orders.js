@@ -25,7 +25,7 @@ const sha = (s) => createHash("sha256").update(s).digest("hex");
  * webhooks.js emitter — every order that changes status is told to the operator's own systems.
  */
 export function createOrders({ db, supplier: configured, railsStore, statusSecret, methods, offersById, now = () => Date.now(), log = console,
-                               qr = null, events = { emit() {} } }) {
+                               qr = null, events = { emit() {} }, allocationWaitMs = 45_000 }) {
   const supplier = asSupplier(configured);
   const method = (id) => methods.find((m) => m.id === id && m.enabled());
 
@@ -67,7 +67,8 @@ export function createOrders({ db, supplier: configured, railsStore, statusSecre
     // The cost the order was quoted at: a plan whose price moved since is refused, not charged.
     const cost = o.cost_usd ?? (o.wholesale_units ? o.wholesale_units / 10_000 : undefined);
     const { delivery } = await fulfil({ supplier, store: railsStore, secret: statusSecret,
-                                        offer: { ...o.offer, _cost_usd: cost }, paymentRef: ref });
+                                        offer: { ...o.offer, _cost_usd: cost }, paymentRef: ref,
+                                        maxWaitMs: allocationWaitMs, now });
     o.delivery = { esim_tran_no: delivery.esim_tran_no, status_token: delivery.status_token };
     o.status = "delivered";
     o.delivered_at = new Date(now()).toISOString();
@@ -144,6 +145,11 @@ export function createOrders({ db, supplier: configured, railsStore, statusSecre
         try { o.reconciliation = await m.prepare(o, v); }
         catch { return { error: "reconciliation_unavailable", order: view(o) }; }
       }
+      // Own the supplier purchase before calling it. A timeout or process exit
+      // must remain visible to the worker even when the buyer never comes back.
+      o.status = "procurement_pending";
+      o.payment = { ref: v.ref, payer: v.payer, tx: null };
+      await save(o);
       try {
         await deliver(o, v.ref);
       } catch (err) {
@@ -227,7 +233,7 @@ export function createOrders({ db, supplier: configured, railsStore, statusSecre
 
     /** Resume uncertain signed payments after a lost response or process restart. No second charge. */
     async reconcile() {
-      for (const o of (await db.all()).filter(x => x.status === "settlement_pending")) {
+      for (const o of (await db.all()).filter(x => ["procurement_pending", "settlement_pending"].includes(x.status))) {
         const m = methods.find(m => m.id === o.method); // Read-only recovery also works when new sales are disabled.
         if (!m?.reconcile || !o.reconciliation) continue;
         const r = o.reconciliation.outcome || await m.reconcile(o.reconciliation);
@@ -235,6 +241,15 @@ export function createOrders({ db, supplier: configured, railsStore, statusSecre
         o.reconciliation.last_check = new Date(now()).toISOString();
         o.reconciliation.reason = r.reason ?? null;
         if (r.status === "paid") {
+          if (!o.delivery) {
+            try { await deliver(o, o.payment.ref); }
+            catch (err) {
+              o.status = "procurement_pending";
+              o.error = err.code || "allocation_pending";
+              await save(o);
+              continue;
+            }
+          }
           o.payment.tx = r.transaction;
           o.status = "delivered";
           o.reconciliation.outcome = r;
@@ -245,7 +260,12 @@ export function createOrders({ db, supplier: configured, railsStore, statusSecre
           o.reconciliation.outcome = r;
           await save(o);
           try {
-            await release({ supplier, store: railsStore, transactionId: transactionIdFor(o.payment.ref) });
+            const transactionId = transactionIdFor(o.payment.ref);
+            const intent = await railsStore.get(transactionId);
+            // A crash before the durable supplier intent issued no purchase.
+            const released = !intent && o.status === "procurement_pending"
+              ? true : await release({ supplier, store: railsStore, transactionId });
+            if (!released) { o.error = "cancellation_pending"; await save(o); continue; }
             delete o.delivery;
             o.status = "payment_failed";
             o.error = r.reason;
