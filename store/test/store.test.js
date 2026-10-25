@@ -325,3 +325,58 @@ test("signed Stripe events must name the issued session, USD payment terms and a
   assert.deepEqual(await send({}), { ignored: true });
   assert.equal(s.supplier.calls.order, 1);
 });
+
+test("legacy Stripe checkouts recover only a matching merchant session and retry API outages", async () => {
+  let remote, unavailable = true;
+  const seen = [];
+  const s = await shop({ stripeFetch: async (url, init) => {
+    seen.push({ url, init });
+    if (unavailable) return json({}, 503);
+    return json(remote);
+  } });
+  const { order, token } = await s.orders.create({ offerId: "ES_5_30", methodId: "stripe" });
+  const db = jsonDb(join(s.dir, "orders.json"), fs);
+  const old = await db.get(order.id);
+  delete old.checkout_binding_required;
+  await db.put(order.id, old); // exact pre-migration record shape
+  const session = { id: "cs_legacy", mode: "payment", currency: "usd", payment_status: "paid",
+    client_reference_id: order.id, metadata: { order_id: order.id }, payment_intent: "pi_legacy",
+    amount_total: old.price_cents, created: Math.floor(old.created_ms / 1000) };
+  const body = JSON.stringify({ type: "checkout.session.completed", data: { object: session } });
+  const ts = Math.floor(Date.now() / 1000);
+  const signature = `t=${ts},v1=${createHmac("sha256", "whsec_x").update(`${ts}.${body}`).digest("hex")}`;
+  assert.deepEqual(await s.orders.cardPaid(body, signature), { error: "payment_reconciliation_pending" });
+  assert.equal((await db.get(order.id)).payment, undefined);
+  unavailable = false;
+  for (const change of [{ metadata: {} }, { client_reference_id: "another" }, { amount_total: 1 },
+    { currency: "eur" }, { payment_intent: "pi_other" }, { created: session.created - 61 }, { id: "cs_other" }]) {
+    remote = { ...session, ...change };
+    assert.deepEqual(await s.orders.cardPaid(body, signature), { error: "payment_order_mismatch" });
+    assert.equal(s.supplier.calls.order, 0);
+  }
+  remote = session;
+  assert.equal((await s.orders.cardPaid(body, signature)).order.status, "delivered");
+  assert.equal((await s.orders.get(order.id, token)).status, "delivered");
+  assert.deepEqual((await db.get(order.id)).checkout, { session: "cs_legacy" });
+  assert.deepEqual(await s.orders.cardPaid(body, signature), { ignored: true });
+  assert.equal(s.supplier.calls.order, 1);
+  for (const { url, init } of seen) {
+    assert.equal(url, "https://api.stripe.com/v1/checkout/sessions/cs_legacy");
+    assert.equal(init.redirect, "error");
+    assert.equal(init.headers.Authorization, "Bearer sk_test_x");
+  }
+});
+
+test("new Stripe orders without an issued checkout never enter legacy reconciliation", async () => {
+  let calls = 0;
+  const s = await shop({ stripeFetch: async () => { calls++; throw new Error("must not fetch"); } });
+  const { order } = await s.orders.create({ offerId: "ES_5_30", methodId: "stripe" });
+  const body = JSON.stringify({ type: "checkout.session.completed", data: { object: {
+    id: "cs_unissued", mode: "payment", currency: "usd", payment_status: "paid", client_reference_id: order.id,
+    payment_intent: "pi_unissued", amount_total: 540 } } });
+  const ts = Math.floor(Date.now() / 1000);
+  const sig = `t=${ts},v1=${createHmac("sha256", "whsec_x").update(`${ts}.${body}`).digest("hex")}`;
+  assert.deepEqual(await s.orders.cardPaid(body, sig), { error: "payment_order_mismatch" });
+  assert.equal(calls, 0);
+  assert.equal(s.supplier.calls.order, 0);
+});

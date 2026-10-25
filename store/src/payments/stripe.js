@@ -54,11 +54,30 @@ export function stripeCards({ secretKey = "", webhookSecret = "", publicUrl = ""
         headers: { Authorization: `Bearer ${secretKey}`, "Content-Type": "application/x-www-form-urlencoded",
                    "Idempotency-Key": `checkout-${order.id}` },
         body,
+        redirect: "error",
         signal: AbortSignal.timeout(20_000),
       });
       const d = await res.json().catch(() => ({}));
       if (!res.ok || !d.url) throw new Error(`stripe: ${d?.error?.message || res.status}`);
       return { method: "stripe", redirect: d.url, session: d.id };
+    },
+
+    /** Recover a pre-binding checkout only from this merchant's authenticated Stripe API. */
+    async recoverCheckout(order, paid) {
+      const res = await fetchImpl(`${api}/v1/checkout/sessions/${encodeURIComponent(paid.session)}`, {
+        headers: { Authorization: `Bearer ${secretKey}` },
+        redirect: "error",
+        signal: AbortSignal.timeout(20_000),
+      });
+      if (!res.ok) throw new Error("stripe reconciliation unavailable");
+      const s = await res.json();
+      // Both fields were set by the old checkout creator. Event metadata alone
+      // is insufficient; the independently retrieved session must agree too.
+      return s.id === paid.session && s.client_reference_id === order.id && s.metadata?.order_id === order.id
+        && s.mode === "payment" && s.currency === "usd" && s.payment_status === "paid"
+        && Number.isSafeInteger(s.amount_total) && s.amount_total === order.price_cents && s.amount_total === paid.amountCents
+        && `stripe:${s.payment_intent}` === paid.ref
+        && Number.isSafeInteger(s.created) && s.created >= Math.floor(order.created_ms / 1000) - 60;
     },
 
     /** The webhook: {orderId, ref} for a paid checkout, null for anything else. */

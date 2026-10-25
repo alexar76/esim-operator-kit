@@ -99,6 +99,7 @@ export function createOrders({ db, supplier: configured, railsStore, statusSecre
         memo: `ESIM-${id.slice(0, 10).toUpperCase().replace(/[^A-Z0-9]/g, "X")}`,
         offer: publicOffer, price_cents: Math.round(Number(offer.price.usd) * 100), cost_usd: _cost_usd,
         created_at: new Date(now()).toISOString(), created_ms: now(), expires_at: now() + HOLD_MS,
+        checkout_binding_required: true,
       };
       o.intent = m.kind === "redirect" ? null : await m.intent(o, { asset });
       // An exact-amount method (Tron) tells orders apart by amount: no two open orders may ask the same.
@@ -315,7 +316,20 @@ export function createOrders({ db, supplier: configured, railsStore, statusSecre
       if (!o || o.status !== "awaiting_payment") return { ignored: true };
       // An event from another payment link/session in the same Stripe account
       // must never fulfil an order merely by naming its public order ID.
-      if (o.method !== "stripe" || !o.checkout?.session || o.checkout.session !== paid.session)
+      if (o.method !== "stripe") return { error: "payment_order_mismatch" };
+      if (!o.checkout?.session && !o.checkout_binding_required) {
+        // Old versions returned the checkout URL without storing its session.
+        // Reconcile only those legacy records; new orders always require the
+        // exact binding saved before the URL is handed to the buyer.
+        let recovered;
+        try { recovered = await m.recoverCheckout(o, paid); }
+        catch { return { error: "payment_reconciliation_pending" }; }
+        if (!recovered) return { error: "payment_order_mismatch" };
+        o.checkout = { session: paid.session };
+        o.checkout_binding_required = true;
+        await save(o);
+      }
+      if (!o.checkout?.session || o.checkout.session !== paid.session)
         return { error: "payment_order_mismatch" };
       if ((await db.all()).some(x => x.id !== o.id && x.payment?.ref === paid.ref)) return { error: "used" };
       o.payment = { ref: paid.ref };

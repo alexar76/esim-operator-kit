@@ -39,7 +39,7 @@ test("every language has the English keys, none empty", () => {
   }
 });
 
-async function serve({ stripe = false, demo = false, kit = null, kitOrigin } = {}) {
+async function serve({ stripe = false, stripeFetch = null, demo = false, kit = null, kitOrigin } = {}) {
   const orders = new Map();
   const supplier = {
     packages: async () => PACKAGES,
@@ -61,7 +61,7 @@ async function serve({ stripe = false, demo = false, kit = null, kitOrigin } = {
     tonPay({ address: new Address(0, Buffer.alloc(32, 7)).toString({ bounceable: false }),
              fetchImpl: async () => new Response(JSON.stringify({ rates: { TON: { prices: { USD: 2 } } } })) }),
     stripeCards(stripe ? { secretKey: "sk_test", webhookSecret: "whsec_t",
-      fetchImpl: async () => new Response(JSON.stringify({ id: "cs", url: "https://checkout.stripe.com/c/cs" })) } : {}),
+      fetchImpl: stripeFetch || (async () => new Response(JSON.stringify({ id: "cs", url: "https://checkout.stripe.com/c/cs" }))) } : {}),
   ];
   const store = createOrders({ db: jsonDb(join(dir, "o.json"), fs), supplier, railsStore: fileStore(join(dir, "r.json"), fs),
                                statusSecret: "http-status-secret-0123456789", methods, offersById: (id) => catalog.byId(id) });
@@ -72,7 +72,7 @@ async function serve({ stripe = false, demo = false, kit = null, kitOrigin } = {
   const base = `http://127.0.0.1:${server.address().port}`;
   const call = (path, init = {}) => fetch(base + path, { redirect: "manual", ...init });
   const post = (path, body, headers = {}) => call(path, { method: "POST", headers: { "content-type": "application/json", ...headers }, body: JSON.stringify(body) });
-  return { call, post, close: () => new Promise((r) => server.close(r)) };
+  return { call, post, dir, close: () => new Promise((r) => server.close(r)) };
 }
 
 test("pages: five languages, country pages, search, 404s, CSP, sitemap and robots", async () => {
@@ -145,6 +145,25 @@ test("Stripe's webhook reads the raw body and refuses a bad signature", async ()
     assert.equal((await s.call("/api/stripe/webhook", { method: "POST", headers: { "stripe-signature": sig, "content-type": "application/json" }, body })).status, 200);
     const view = await (await s.call(`/api/orders/${order.id}`, { headers: { "x-order-token": token } })).json();
     assert.equal(view.status, "delivered");
+  } finally { await s.close(); }
+});
+
+test("legacy Stripe reconciliation failures return 503 so webhook delivery is retried", async () => {
+  const s = await serve({ stripe: true, stripeFetch: async () => new Response("{}", { status: 503 }) });
+  try {
+    const { order } = await (await s.post("/api/orders", { offer_id: "ES_5_30", method: "stripe" })).json();
+    const db = jsonDb(join(s.dir, "o.json"), fs);
+    const old = await db.get(order.id);
+    delete old.checkout_binding_required;
+    await db.put(order.id, old);
+    const body = JSON.stringify({ type: "checkout.session.completed", data: { object: { id: "cs", mode: "payment",
+      currency: "usd", payment_status: "paid", client_reference_id: order.id, payment_intent: "pi_old", amount_total: 540 } } });
+    const t = Math.floor(Date.now() / 1000);
+    const sig = `t=${t},v1=${createHmac("sha256", "whsec_t").update(`${t}.${body}`).digest("hex")}`;
+    const res = await s.call("/api/stripe/webhook", { method: "POST", headers: { "stripe-signature": sig }, body });
+    assert.equal(res.status, 503);
+    assert.equal((await res.json()).error, "payment_reconciliation_pending");
+    assert.equal((await db.get(order.id)).payment, undefined);
   } finally { await s.close(); }
 });
 

@@ -83,7 +83,8 @@ export function createApp({ store, origin, catalog, orders, methods, allow = () 
   app.post("/api/stripe/webhook", (req, res, next) => (store.demo ? res.status(403).end() : next()),
     express.raw({ type: "*/*", limit: "256kb" }), async (req, res) => {
     const r = await orders.cardPaid(req.body.toString("utf8"), req.get("stripe-signature") || "");
-    return res.status(r.error === "bad_signature" ? 400 : 200).json(r.error ? { error: r.error } : { received: true });
+    const code = r.error === "bad_signature" ? 400 : r.error === "payment_reconciliation_pending" ? 503 : 200;
+    return res.status(code).json(r.error ? { error: r.error } : { received: true });
   });
   app.use(express.json({ limit: "16kb" }));
 
