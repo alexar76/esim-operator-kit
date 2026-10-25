@@ -11,18 +11,25 @@
     "test": "node --test \"test/**/*.test.js\""
   },
   "dependencies": {
-    "@coinbase/cdp-sdk": "1.57.1",
     "@ton/core": "0.63.1",
     "@ton/crypto": "3.3.0",
     "@tonconnect/ui": "3.0.2",
-    "@x402/core": "2.28.0",
-    "@x402/evm": "2.28.0",
+    "@x402/core": "2.28.0+aimarket.zod4.1",
+    "@x402/evm": "2.28.0+aimarket.zod4.1",
     "@x402/express": "2.28.0",
-    "@x402/extensions": "2.28.0",
-    "@x402/svm": "2.28.0",
+    "@x402/extensions": "2.28.0+aimarket.zod4.1",
     "express": "5.1.0",
     "mermaid": "12.2.0",
     "qrcode": "1.5.4",
-    "viem": "2.57.6"
-  }
+    "viem": "2.57.6",
+    "@aimarket/x402-cdp": "0.1.0",
+    "zod": "4.6.7"
+  },
+  "bundleDependencies": [
+    "@x402/core",
+    "@x402/evm",
+    "@x402/express",
+    "@x402/extensions",
+    "@aimarket/x402-cdp"
+  ]
 }

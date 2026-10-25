@@ -17,5 +17,5 @@ cd "$(dirname "$0")"
 TAG="prod-$(date -u +%Y%m%d)-$(git rev-parse --short HEAD)"
 if [ -n "$(git status --porcelain -- . )" ]; then echo "esim-rails has uncommitted changes; commit first" >&2; exit 1; fi
 rsync -az --delete -e "ssh -i $KEY -o IdentitiesOnly=yes" \
-  Dockerfile package.json package-lock.json src scripts spec bin deploy/remote.sh "$TARGET:/opt/esim-rails/"
+  Dockerfile package.json package-lock.json vendor src scripts spec bin deploy/remote.sh "$TARGET:/opt/esim-rails/"
 ssh -i "$KEY" -o IdentitiesOnly=yes "$TARGET" "env $EXTRA sh /opt/esim-rails/remote.sh $TAG $PAY_TO $DEMO" < /dev/null

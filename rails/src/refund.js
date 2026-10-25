@@ -53,7 +53,7 @@ export async function buildRefunder({ keyFile, cdpKeyFile, publicUrl = "", maxUs
   if (!facilitator) {
     if (!cdpKeyFile) throw new Error("refunds go through the CDP facilitator: CDP_KEY_FILE is needed too");
     const cdp = JSON.parse(readFileSync(cdpKeyFile, "utf8"));
-    const { createCdpFacilitatorClient } = await import("@coinbase/cdp-sdk/x402");
+    const { createCdpFacilitatorClient } = await import("@aimarket/x402-cdp");
     facilitator = createCdpFacilitatorClient({ apiKeyId: cdp.id, apiKeySecret: cdp.privateKey });
   }
   const [{ x402Client }, { ExactEvmScheme }] = await Promise.all([import("@x402/core/client"), import("@x402/evm")]);

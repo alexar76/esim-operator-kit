@@ -115,7 +115,7 @@ export function usdcBase({ payTo, facilitator, reconciler = null, now = () => Da
 /** The CDP facilitator behind the two calls above, built from the same key file as the seller node. */
 export async function cdpFacilitator({ cdpKeyFile, payTo, readFile }) {
   const key = JSON.parse(await readFile(cdpKeyFile, "utf8"));
-  const { createX402Server } = await import("@coinbase/cdp-sdk/x402");
+  const { createX402Server } = await import("@aimarket/x402-cdp");
   const server = await createX402Server({
     apiKeyId: key.id, apiKeySecret: key.privateKey, environment: "production",
     payToConfig: { type: "address", evm: payTo },

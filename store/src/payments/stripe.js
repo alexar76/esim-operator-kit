@@ -68,8 +68,14 @@ export function stripeCards({ secretKey = "", webhookSecret = "", publicUrl = ""
       if (event.type !== "checkout.session.completed" && event.type !== "checkout.session.async_payment_succeeded") return null;
       const s = event.data?.object || {};
       if (s.payment_status !== "paid") return null;
+      if (s.mode !== "payment" || s.currency !== "usd" || !Number.isSafeInteger(s.amount_total) || s.amount_total < 1
+          || typeof s.id !== "string" || !s.id || typeof s.payment_intent !== "string" || !s.payment_intent)
+        return { error: "payment_terms_mismatch" };
       const orderId = s.client_reference_id || s.metadata?.order_id;
-      return orderId ? { orderId, ref: `stripe:${s.payment_intent || s.id}`, amountCents: s.amount_total } : null;
+      if (s.client_reference_id && s.metadata?.order_id && s.client_reference_id !== s.metadata.order_id)
+        return { error: "payment_order_mismatch" };
+      return typeof orderId === "string" && orderId
+        ? { orderId, session: s.id, ref: `stripe:${s.payment_intent}`, amountCents: s.amount_total } : null;
     },
   };
 }

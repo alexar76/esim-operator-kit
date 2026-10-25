@@ -138,7 +138,7 @@ test("Stripe's webhook reads the raw body and refuses a bad signature", async ()
     const { order, token } = await (await s.post("/api/orders", { offer_id: "ES_5_30", method: "stripe" })).json();
     assert.equal((await (await s.post(`/api/orders/${order.id}/checkout`, { lang: "ru" }, { "x-order-token": token })).json()).redirect,
                  "https://checkout.stripe.com/c/cs");
-    const body = JSON.stringify({ type: "checkout.session.completed", data: { object: { payment_status: "paid", client_reference_id: order.id, payment_intent: "pi_9", amount_total: 540 } } });
+    const body = JSON.stringify({ type: "checkout.session.completed", data: { object: { id: "cs", mode: "payment", currency: "usd", payment_status: "paid", client_reference_id: order.id, payment_intent: "pi_9", amount_total: 540 } } });
     const t = Math.floor(Date.now() / 1000);
     const sig = `t=${t},v1=${createHmac("sha256", "whsec_t").update(`${t}.${body}`).digest("hex")}`;
     assert.equal((await s.call("/api/stripe/webhook", { method: "POST", headers: { "stripe-signature": "t=1,v1=00" }, body })).status, 400);

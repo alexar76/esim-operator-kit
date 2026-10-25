@@ -221,7 +221,7 @@ test("Stripe: off without keys; with them a Checkout Session for the exact price
   assert.equal(sent[0].init.headers["Idempotency-Key"], `checkout-${order.id}`);
 
   const event = JSON.stringify({ type: "checkout.session.completed", data: { object: {
-    id: "cs_1", payment_status: "paid", client_reference_id: order.id, payment_intent: "pi_1", amount_total: 540 } } });
+    id: "cs_1", mode: "payment", currency: "usd", payment_status: "paid", client_reference_id: order.id, payment_intent: "pi_1", amount_total: 540 } } });
   const t = Math.floor(Date.now() / 1000);
   const sig = (secret, ts = t, body = event) => `t=${ts},v1=${createHmac("sha256", secret).update(`${ts}.${body}`).digest("hex")}`;
   assert.deepEqual(await s.orders.cardPaid(event, sig("wrong")), { error: "bad_signature" });
@@ -284,4 +284,44 @@ test("store reconciles pending payments across restart, preserving delivery acce
       assert.equal(settles, 1);
     } finally { await fs.rm(t.dir, { recursive: true, force: true }); }
   }
+});
+
+test("every public order operation rejects an omitted, null or empty buyer token", async () => {
+  const s = await shop({ facilitator: {} });
+  const { order, token } = await s.orders.create({ offerId: "ES_5_30", methodId: "usdc-base" });
+  for (const missing of [undefined, null, ""]) {
+    assert.equal(await s.orders.get(order.id, missing), null);
+    for (const [name, args] of [
+      ["authorize", [{}]], ["claim", ["0x" + "ab".repeat(32), "proof"]],
+      ["tonMessage", [BUYER_TON]], ["cardCheckout", ["https://shop.example/o/x"]],
+    ]) assert.deepEqual(await s.orders[name](order.id, missing, ...args), { error: "not_found" }, name);
+  }
+  assert.equal((await s.orders.get(order.id, token)).id, order.id);
+  assert.equal(s.supplier.calls.order, 0);
+});
+
+test("signed Stripe events must name the issued session, USD payment terms and a Stripe order", async () => {
+  let next = 0;
+  const s = await shop({ stripeFetch: async () => json({ id: `cs_${++next}`, url: "https://checkout.stripe.com/c/test" }), facilitator: {} });
+  const { order, token } = await s.orders.create({ offerId: "ES_5_30", methodId: "stripe" });
+  await s.orders.cardCheckout(order.id, token, "https://shop.example/o/x");
+  const base = { id: "cs_1", mode: "payment", currency: "usd", payment_status: "paid", client_reference_id: order.id,
+    payment_intent: "pi_real", amount_total: 540 };
+  const send = async (change) => {
+    const body = JSON.stringify({ type: "checkout.session.completed", data: { object: { ...base, ...change } } });
+    const ts = Math.floor(Date.now() / 1000);
+    return s.orders.cardPaid(body, `t=${ts},v1=${createHmac("sha256", "whsec_x").update(`${ts}.${body}`).digest("hex")}`);
+  };
+  for (const change of [
+    { currency: "eur" }, { currency: undefined }, { mode: "subscription" },
+    ...[undefined, null, "540", -1, 1.5].map(amount_total => ({ amount_total })),
+    { id: "cs_other" }, { payment_intent: undefined }, { metadata: { order_id: "other-order" } },
+  ]) assert.ok((await send(change)).error, JSON.stringify(change));
+  const other = await s.orders.create({ offerId: "ES_5_30", methodId: "usdc-base" });
+  assert.equal((await send({ client_reference_id: other.order.id })).error, "payment_order_mismatch");
+  assert.equal((await s.orders.get(order.id, token)).status, "awaiting_payment");
+  assert.equal(s.supplier.calls.order, 0, "unrelated signed events cannot trigger wholesale spending");
+  assert.equal((await send({})).order.status, "delivered");
+  assert.deepEqual(await send({}), { ignored: true });
+  assert.equal(s.supplier.calls.order, 1);
 });

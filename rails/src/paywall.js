@@ -17,7 +17,7 @@ export async function buildPaywall({ cdpKeyFile, payTo, publicUrl, priceOf, onSe
   }
   const key = JSON.parse(readFileSync(cdpKeyFile, "utf8"));
   const [{ createX402Server }, { paymentMiddlewareFromHTTPServer }] = await Promise.all([
-    import("@coinbase/cdp-sdk/x402"),
+    import("@aimarket/x402-cdp"),
     import("@x402/express"),
   ]);
   const routes = {

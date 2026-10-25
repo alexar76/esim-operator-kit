@@ -30,13 +30,14 @@ export function createOrders({ db, supplier: configured, railsStore, statusSecre
   const method = (id) => methods.find((m) => m.id === id && m.enabled());
 
   async function load(id, token) {
+    // Public order APIs always require the buyer's secret, including when the
+    // HTTP header was omitted. Trusted webhook lookup is separate below.
+    if (typeof token !== "string" || !token) return null;
     const o = await db.get(id);
     if (!o) return null;
-    if (token !== undefined) {
-      const a = Buffer.from(sha(String(token)));
-      const b = Buffer.from(o.token_sha256);
-      if (a.length !== b.length || !timingSafeEqual(a, b)) return null;
-    }
+    const a = Buffer.from(sha(token));
+    const b = Buffer.from(o.token_sha256);
+    if (a.length !== b.length || !timingSafeEqual(a, b)) return null;
     return o;
   }
   // What the operator's systems hear about an order: never its token, never the activation code.
@@ -310,8 +311,12 @@ export function createOrders({ db, supplier: configured, railsStore, statusSecre
       const paid = m.paidFromWebhook(rawBody, signature);
       if (!paid) return { ignored: true };
       if (paid.error) return { error: paid.error };
-      const o = await load(paid.orderId);
+      const o = await db.get(paid.orderId);
       if (!o || o.status !== "awaiting_payment") return { ignored: true };
+      // An event from another payment link/session in the same Stripe account
+      // must never fulfil an order merely by naming its public order ID.
+      if (o.method !== "stripe" || !o.checkout?.session || o.checkout.session !== paid.session)
+        return { error: "payment_order_mismatch" };
       if ((await db.all()).some(x => x.id !== o.id && x.payment?.ref === paid.ref)) return { error: "used" };
       o.payment = { ref: paid.ref };
       await save(o);
@@ -325,7 +330,11 @@ export function createOrders({ db, supplier: configured, railsStore, statusSecre
     async cardCheckout(id, token, orderUrl) {
       const o = await load(id, token);
       if (!o || o.method !== "stripe" || o.status !== "awaiting_payment") return { error: "not_found" };
-      return { redirect: (await method("stripe").intent(o, { orderUrl })).redirect };
+      const checkout = await method("stripe").intent(o, { orderUrl });
+      if (typeof checkout.session !== "string" || !checkout.session) return { error: "checkout_unavailable" };
+      o.checkout = { session: checkout.session };
+      await save(o);
+      return { redirect: checkout.redirect };
     },
   };
   let queue = Promise.resolve();

@@ -46,7 +46,8 @@
     "examples",
     "scripts",
     "README.md",
-    "node.toml.example"
+    "node.toml.example",
+    "vendor"
   ],
   "scripts": {
     "test": "node --test \"test/**/*.test.js\"",
@@ -56,14 +57,22 @@
     "build": "node --check src/index.js && node bin/esim-rails.mjs schemas > /dev/null"
   },
   "dependencies": {
-    "@coinbase/cdp-sdk": "1.57.1",
-    "@x402/core": "2.28.0",
-    "@x402/evm": "2.28.0",
+    "@x402/core": "2.28.0+aimarket.zod4.1",
+    "@x402/evm": "2.28.0+aimarket.zod4.1",
     "@x402/express": "2.28.0",
-    "@x402/extensions": "2.28.0",
-    "@x402/svm": "2.28.0",
+    "@x402/extensions": "2.28.0+aimarket.zod4.1",
     "express": "^5.1.0",
     "viem": "2.57.6",
-    "@x402/fetch": "2.28.0"
-  }
+    "@x402/fetch": "2.28.0",
+    "@aimarket/x402-cdp": "0.1.0",
+    "zod": "4.6.7"
+  },
+  "bundleDependencies": [
+    "@x402/core",
+    "@x402/evm",
+    "@x402/express",
+    "@x402/extensions",
+    "@x402/fetch",
+    "@aimarket/x402-cdp"
+  ]
 }
