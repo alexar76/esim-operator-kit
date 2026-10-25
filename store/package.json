@@ -18,10 +18,10 @@
     "@x402/evm": "2.28.0+aimarket.zod4.1",
     "@x402/express": "2.28.0",
     "@x402/extensions": "2.28.0+aimarket.zod4.1",
-    "express": "5.1.0",
+    "express": "5.3.0",
     "mermaid": "12.2.0",
     "qrcode": "1.5.4",
-    "viem": "2.57.6",
+    "viem": "2.57.10",
     "@aimarket/x402-cdp": "0.1.0",
     "zod": "4.6.7"
   },
