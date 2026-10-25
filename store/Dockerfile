@@ -1,6 +1,7 @@
+# Node security baseline: 22.23.4 (2026-10-21 security release).
 # Built from a directory holding store/, rails/src, README.md and docs/ (deploy.sh lays it out; in the kit, esim-kit/ itself):
 #   docker build -f store/Dockerfile .
-FROM node:22-alpine
+FROM node:22.23.4-alpine
 WORKDIR /app/store
 ENV NODE_ENV=production
 COPY store/package.json store/package-lock.json ./
