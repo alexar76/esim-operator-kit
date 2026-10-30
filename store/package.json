@@ -23,7 +23,8 @@
     "qrcode": "1.5.4",
     "viem": "2.57.10",
     "@aimarket/x402-cdp": "0.1.0",
-    "zod": "4.6.7"
+    "zod": "4.6.7",
+    "deepmerge": "file:vendor/aimarket-deepmerge-safe-1.0.0.tgz"
   },
   "bundleDependencies": [
     "@x402/core",
@@ -31,5 +32,8 @@
     "@x402/express",
     "@x402/extensions",
     "@aimarket/x402-cdp"
-  ]
+  ],
+  "overrides": {
+    "deepmerge": "$deepmerge"
+  }
 }
