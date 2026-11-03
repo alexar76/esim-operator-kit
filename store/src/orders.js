@@ -18,6 +18,7 @@ import { asSupplier } from "../../rails/src/supplier.js";
 
 const HOLD_MS = 20 * 60_000;           // how long a price and its payment terms hold
 const WATCH_MS = 24 * 3_600_000;       // how long a pushed payment is looked for
+const CARD_RECHECK_MS = 5 * 60_000;
 const sha = (s) => createHash("sha256").update(s).digest("hex");
 
 /**
@@ -51,6 +52,9 @@ export function createOrders({ db, supplier: configured, railsStore, statusSecre
     await db.put(o.id, o);
     if (!before) events.emit("order.created", event(o));
     else if (before.status !== o.status) events.emit(`order.${o.status}`, event(o));
+    else if (before.payment?.stripe_status !== o.payment?.stripe_status
+      || before.payment?.refunded_cents !== o.payment?.refunded_cents)
+      events.emit("order.payment_changed", event(o));
   }
 
   /** What the buyer's page shows; never the token, never the wholesale cost. */
@@ -58,7 +62,9 @@ export function createOrders({ db, supplier: configured, railsStore, statusSecre
     return {
       id: o.id, status: o.status, method: o.method, created_at: o.created_at, expires_at: o.expires_at,
       price_usd: (o.price_cents / 100).toFixed(2), offer: o.offer, intent: o.intent ?? null,
-      payment: o.payment ? { ref: o.payment.ref, tx: o.payment.tx ?? null } : null,
+      payment: o.payment ? { ref: o.payment.ref, tx: o.payment.tx ?? null,
+        ...(o.payment.stripe_status && { status: o.payment.stripe_status, refunded_cents: o.payment.refunded_cents }),
+      } : null,
       claim: o.claim ? { hash: o.claim.hash, confirming: Boolean(o.claim.confirming) } : null,
       error: o.error ?? null,
     };
@@ -74,6 +80,27 @@ export function createOrders({ db, supplier: configured, railsStore, statusSecre
     o.status = "delivered";
     o.delivered_at = new Date(now()).toISOString();
     return delivery;
+  }
+
+  async function applyCardPayment(o, paid, reconciledStatus = "paid") {
+    if (o.checkout?.session !== paid.session || (o.payment && o.payment.ref !== paid.ref))
+      return { error: "payment_order_mismatch" };
+    if ((await db.all()).some(x => x.id !== o.id && x.payment?.ref === paid.ref)) return { error: "used" };
+    o.payment = { ref: paid.ref, amount_cents: paid.amountCents };
+    if (reconciledStatus !== "paid") {
+      o.status = reconciledStatus;
+      await save(o);
+      return { order: view(o) };
+    }
+    await save(o);
+    if (paid.amountCents < o.price_cents) {
+      o.status = "underpaid";
+    } else {
+      try { await deliver(o, paid.ref); }
+      catch (err) { o.status = "refund_due"; o.error = err.code || "delivery_failed"; }
+    }
+    await save(o);
+    return { order: view(o) };
   }
 
   // One writer for this store: payment reservation and delivery must not race a watcher or webhook.
@@ -280,8 +307,30 @@ export function createOrders({ db, supplier: configured, railsStore, statusSecre
     /** Pushed methods: look for each open order's payment and deliver the paid ones. */
     async watch() {
       const all = await db.all();
-      // Nothing paid for a day, whatever the method: the order is over (a pending claim keeps it open).
-      for (const o of all.filter((x) => x.status === "awaiting_payment" && !x.claim && now() - x.created_ms > WATCH_MS)) {
+      // Bound card orders expire only after Stripe confirms expiry and nonpayment.
+      // Include orders previously expired by the storefront before this check existed.
+      const cards = methods.find(m => m.id === "stripe");
+      const cardOrders = all.filter(x => x.method === "stripe" && x.checkout?.session
+        && ["awaiting_payment", "expired"].includes(x.status) && !x.checkout.confirmed_expired
+        && now() >= x.expires_at && now() - (x.checkout.last_checked_ms || 0) >= CARD_RECHECK_MS);
+      cardOrders.sort((a, b) => (a.checkout.last_checked_ms || 0) - (b.checkout.last_checked_ms || 0));
+      for (const o of cardOrders.slice(0, 1)) {
+        if (!cards?.checkoutStatus) break;
+        o.checkout.last_checked_ms = now();
+        await save(o);
+        let result;
+        try { result = await cards.checkoutStatus(o); } catch { continue; }
+        if (result.paid) {
+          await applyCardPayment(o, result.paid, result.status);
+        } else if (result.status === "expired" && !o.payment) {
+          o.status = "expired";
+          o.checkout.confirmed_expired = true;
+          await save(o);
+        }
+      }
+      // Pending chain claims and bound card sessions keep their own lifecycle.
+      for (const o of all.filter((x) => x.status === "awaiting_payment" && !x.claim
+        && !(x.method === "stripe" && x.checkout?.session) && now() - x.created_ms > WATCH_MS)) {
         o.status = "expired";
         await save(o);
       }
@@ -312,8 +361,24 @@ export function createOrders({ db, supplier: configured, railsStore, statusSecre
       const paid = m.paidFromWebhook(rawBody, signature);
       if (!paid) return { ignored: true };
       if (paid.error) return { error: paid.error };
+      if (paid.reversal) {
+        const o = (await db.all()).find(row => row.method === "stripe" && row.payment?.ref === paid.ref);
+        if (!o) return { ignored: true };
+        if (!o.checkout?.session) return { error: "payment_reconciliation_pending" };
+        let current;
+        try { current = await m.checkoutStatus(o); }
+        catch { return { error: "payment_reconciliation_pending" }; }
+        if (!current.paid || current.paid.ref !== paid.ref
+          || (o.payment.amount_cents != null && current.paid.amountCents !== o.payment.amount_cents))
+          return { error: "payment_reconciliation_pending" };
+        // Preserve the eSIM delivery record. The charge lifecycle is independent.
+        o.payment = { ...o.payment, stripe_status: current.status, refunded_cents: current.refundedCents };
+        if (!o.delivery && current.status !== "paid") o.status = current.status;
+        await save(o);
+        return { order: view(o) };
+      }
       const o = await db.get(paid.orderId);
-      if (!o || o.status !== "awaiting_payment") return { ignored: true };
+      if (!o || !["awaiting_payment", "expired"].includes(o.status)) return { ignored: true };
       // An event from another payment link/session in the same Stripe account
       // must never fulfil an order merely by naming its public order ID.
       if (o.method !== "stripe") return { error: "payment_order_mismatch" };
@@ -329,22 +394,30 @@ export function createOrders({ db, supplier: configured, railsStore, statusSecre
         o.checkout_binding_required = true;
         await save(o);
       }
-      if (!o.checkout?.session || o.checkout.session !== paid.session)
-        return { error: "payment_order_mismatch" };
-      if ((await db.all()).some(x => x.id !== o.id && x.payment?.ref === paid.ref)) return { error: "used" };
-      o.payment = { ref: paid.ref };
-      await save(o);
-      if (paid.amountCents < o.price_cents) { o.status = "underpaid"; await save(o); return { order: view(o) }; }
-      try { await deliver(o, paid.ref); } catch (err) { o.status = "refund_due"; o.error = err.code || "delivery_failed"; }
-      await save(o);
-      return { order: view(o) };
+      if (o.status === "expired" && o.checkout?.session === paid.session) {
+        // A late event is a snapshot. Stripe may have since refunded the payment.
+        let current;
+        try { current = await m.checkoutStatus(o); }
+        catch { return { error: "payment_reconciliation_pending" }; }
+        if (!current.paid) return { error: "payment_reconciliation_pending" };
+        if (current.paid.ref !== paid.ref || current.paid.amountCents !== paid.amountCents)
+          return { error: "payment_order_mismatch" };
+        return applyCardPayment(o, current.paid, current.status);
+      }
+      return applyCardPayment(o, paid);
     },
 
     /** Cards: the Checkout Session to send the buyer to. */
     async cardCheckout(id, token, orderUrl) {
       const o = await load(id, token);
       if (!o || o.method !== "stripe" || o.status !== "awaiting_payment") return { error: "not_found" };
-      const checkout = await method("stripe").intent(o, { orderUrl });
+      const m = method("stripe");
+      if (!m) return { error: "unknown_method" };
+      if (o.checkout?.session) {
+        const existing = await m.checkoutStatus(o);
+        return existing.redirect ? { redirect: existing.redirect } : { error: "checkout_unavailable" };
+      }
+      const checkout = await m.intent(o, { orderUrl });
       if (typeof checkout.session !== "string" || !checkout.session) return { error: "checkout_unavailable" };
       o.checkout = { session: checkout.session };
       await save(o);

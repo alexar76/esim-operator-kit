@@ -24,13 +24,29 @@ export function verifyWebhook(rawBody, header, secret, { nowSec = Math.floor(Dat
   const signatures = String(header || "").split(",").filter((p) => p.trim().startsWith("v1=")).map((p) => p.trim().slice(3));
   if (!Number.isInteger(t) || !signatures.length || Math.abs(nowSec - t) > toleranceSec) return null;
   const want = createHmac("sha256", secret).update(`${t}.${rawBody}`).digest("hex");
-  const ok = signatures.some((s) => s.length === want.length && timingSafeEqual(Buffer.from(s), Buffer.from(want)));
+  const ok = signatures.some((s) => /^[a-f0-9]{64}$/.test(s) && timingSafeEqual(Buffer.from(s), Buffer.from(want)));
   if (!ok) return null;
   try { return JSON.parse(rawBody); } catch { return null; }
 }
 
 export function stripeCards({ secretKey = "", webhookSecret = "", publicUrl = "", fetchImpl = globalThis.fetch,
                               api = "https://api.stripe.com" }) {
+  async function readSession(id, { includeCharge = false } = {}) {
+    const expand = includeCharge ? "?expand%5B%5D=payment_intent.latest_charge" : "";
+    const res = await fetchImpl(`${api}/v1/checkout/sessions/${encodeURIComponent(id)}${expand}`, {
+      headers: { Authorization: `Bearer ${secretKey}` },
+      redirect: "error",
+      signal: AbortSignal.timeout(20_000),
+    });
+    if (!res.ok) throw new Error("stripe reconciliation unavailable");
+    return res.json();
+  }
+
+  function matchesOrder(s, order, id) {
+    return s.id === id && s.client_reference_id === order.id && s.metadata?.order_id === order.id
+      && s.mode === "payment" && s.currency === "usd";
+  }
+
   return {
     id: "stripe",
     kind: "redirect",
@@ -58,32 +74,55 @@ export function stripeCards({ secretKey = "", webhookSecret = "", publicUrl = ""
         signal: AbortSignal.timeout(20_000),
       });
       const d = await res.json().catch(() => ({}));
-      if (!res.ok || !d.url) throw new Error(`stripe: ${d?.error?.message || res.status}`);
+      if (!res.ok || !d.url) throw new Error(`stripe checkout unavailable (${res.status})`);
       return { method: "stripe", redirect: d.url, session: d.id };
     },
 
     /** Recover a pre-binding checkout only from this merchant's authenticated Stripe API. */
     async recoverCheckout(order, paid) {
-      const res = await fetchImpl(`${api}/v1/checkout/sessions/${encodeURIComponent(paid.session)}`, {
-        headers: { Authorization: `Bearer ${secretKey}` },
-        redirect: "error",
-        signal: AbortSignal.timeout(20_000),
-      });
-      if (!res.ok) throw new Error("stripe reconciliation unavailable");
-      const s = await res.json();
+      const s = await readSession(paid.session);
       // Both fields were set by the old checkout creator. Event metadata alone
       // is insufficient; the independently retrieved session must agree too.
-      return s.id === paid.session && s.client_reference_id === order.id && s.metadata?.order_id === order.id
-        && s.mode === "payment" && s.currency === "usd" && s.payment_status === "paid"
+      return matchesOrder(s, order, paid.session) && s.payment_status === "paid"
         && Number.isSafeInteger(s.amount_total) && s.amount_total === order.price_cents && s.amount_total === paid.amountCents
         && `stripe:${s.payment_intent}` === paid.ref
         && Number.isSafeInteger(s.created) && s.created >= Math.floor(order.created_ms / 1000) - 60;
+    },
+
+    /** Read the bound checkout to recover a missed webhook or confirm unpaid expiry. */
+    async checkoutStatus(order) {
+      if (!secretKey) throw new Error("stripe reconciliation unavailable");
+      const id = order.checkout.session;
+      const s = await readSession(id, { includeCharge: true });
+      if (!matchesOrder(s, order, id)) throw new Error("stripe checkout terms mismatch");
+      if (s.payment_status === "paid") {
+        const intent = s.payment_intent;
+        const charge = intent?.latest_charge;
+        if (!Number.isSafeInteger(s.amount_total) || s.amount_total <= 0 || !intent?.id
+            || !charge?.id || !Number.isSafeInteger(charge.amount_refunded))
+          throw new Error("stripe checkout charge unavailable");
+        const paid = { session: id, ref: `stripe:${intent.id}`, amountCents: s.amount_total };
+        if (charge.refunded) return { status: "refunded", paid, refundedCents: charge.amount_refunded };
+        if (charge.disputed || charge.amount_refunded > 0)
+          return { status: "payment_review", paid, refundedCents: charge.amount_refunded };
+        return { status: "paid", paid, refundedCents: 0 };
+      }
+      return {
+        status: s.status === "expired" && s.payment_status === "unpaid" ? "expired" : "pending",
+        redirect: s.status === "open" ? s.url : undefined,
+      };
     },
 
     /** The webhook: {orderId, ref} for a paid checkout, null for anything else. */
     paidFromWebhook(rawBody, signatureHeader, opts) {
       const event = verifyWebhook(rawBody, signatureHeader, webhookSecret, opts);
       if (!event) return { error: "bad_signature" };
+      if (["charge.refunded", "charge.dispute.created", "charge.dispute.closed",
+        "refund.created", "refund.updated", "refund.failed"].includes(event.type)) {
+        const intent = event.data?.object?.payment_intent;
+        return typeof intent === "string" && intent.startsWith("pi_")
+          ? { reversal: true, ref: `stripe:${intent}` } : null;
+      }
       if (event.type !== "checkout.session.completed" && event.type !== "checkout.session.async_payment_succeeded") return null;
       const s = event.data?.object || {};
       if (s.payment_status !== "paid") return null;

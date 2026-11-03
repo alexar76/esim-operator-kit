@@ -380,3 +380,112 @@ test("new Stripe orders without an issued checkout never enter legacy reconcilia
   assert.equal(calls, 0);
   assert.equal(s.supplier.calls.order, 0);
 });
+
+test("Stripe watcher recovers a missed paid webhook for an order expired by an older release", async () => {
+  let clock = Date.now(), remote, unavailable = true, created = 0;
+  const s = await shop({ now: () => clock, stripeFetch: async (_url, init) => {
+    if (init.method === "POST") {
+      created++;
+      return json({ id: "cs_recovery", url: "https://checkout.stripe.com/c/recovery" });
+    }
+    return unavailable ? json({}, 503) : json(remote);
+  } });
+  const { order, token } = await s.orders.create({ offerId: "ES_5_30", methodId: "stripe" });
+  await s.orders.cardCheckout(order.id, token, "https://shop.example/o/x");
+  const db = jsonDb(join(s.dir, "orders.json"), fs);
+  clock += 25 * 60 * 60_000;
+  await s.orders.watch();
+  assert.equal((await db.get(order.id)).status, "awaiting_payment");
+  const old = await db.get(order.id);
+  old.status = "expired";
+  await db.put(order.id, old);
+  unavailable = false;
+  remote = { id: "cs_recovery", mode: "payment", currency: "usd", status: "complete", payment_status: "unpaid",
+    client_reference_id: order.id, metadata: { order_id: order.id }, payment_intent: "pi_late", amount_total: 540 };
+  clock += 5 * 60_000;
+  await s.orders.watch();
+  assert.equal((await db.get(order.id)).payment, undefined);
+  remote.payment_status = "paid";
+  remote.payment_intent = { id: "pi_late", latest_charge: { id: "ch_late", amount_refunded: 0 } };
+  clock += 5 * 60_000;
+  await s.orders.watch();
+  await s.orders.watch();
+  const row = await db.get(order.id);
+  assert.equal(row.status, "delivered");
+  assert.deepEqual(row.payment, { ref: "stripe:pi_late", amount_cents: 540 });
+  assert.equal(s.supplier.calls.order, 1);
+  assert.equal(created, 1);
+});
+
+test("Stripe does not replace a bound Checkout Session and expires only on Stripe confirmation", async () => {
+  let clock = Date.now(), remote, created = 0;
+  const url = "https://checkout.stripe.com/c/expiry";
+  const s = await shop({ now: () => clock, stripeFetch: async (_url, init) => {
+    if (init.method === "POST") {
+      created++;
+      return json({ id: "cs_expiry", url });
+    }
+    return json(remote);
+  } });
+  const { order, token } = await s.orders.create({ offerId: "ES_5_30", methodId: "stripe" });
+  await s.orders.cardCheckout(order.id, token, "https://shop.example/o/x");
+  remote = { id: "cs_expiry", mode: "payment", currency: "usd", status: "open", payment_status: "unpaid",
+    client_reference_id: order.id, metadata: { order_id: order.id }, url };
+  assert.deepEqual(await s.orders.cardCheckout(order.id, token, "https://shop.example/o/x"), { redirect: url });
+  assert.equal(created, 1);
+  remote.status = "expired";
+  clock += 25 * 60 * 60_000;
+  await s.orders.watch();
+  assert.equal((await s.orders.get(order.id, token)).status, "expired");
+  assert.equal(s.supplier.calls.order, 0);
+});
+
+test("Stripe recovery records a refunded charge without purchasing an eSIM", async () => {
+  let clock = Date.now(), remote;
+  const s = await shop({ now: () => clock, stripeFetch: async (_url, init) => init.method === "POST"
+    ? json({ id: "cs_refunded", url: "https://checkout.stripe.com/c/refunded" }) : json(remote) });
+  const { order, token } = await s.orders.create({ offerId: "ES_5_30", methodId: "stripe" });
+  await s.orders.cardCheckout(order.id, token, "https://shop.example/o/x");
+  remote = { id: "cs_refunded", mode: "payment", currency: "usd", payment_status: "paid",
+    client_reference_id: order.id, metadata: { order_id: order.id }, amount_total: 540,
+    payment_intent: { id: "pi_refunded", latest_charge: { id: "ch_refunded", amount_refunded: 540, refunded: true } } };
+  clock += 25 * 60 * 60_000;
+  await s.orders.watch();
+  assert.equal((await s.orders.get(order.id, token)).status, "refunded");
+  assert.equal(s.supplier.calls.order, 0);
+});
+
+test("Stripe reversal tracks cumulative refund without changing the delivered eSIM", async () => {
+  let remote, unavailable = false;
+  const s = await shop({ stripeFetch: async (_url, init) => init.method === "POST"
+    ? json({ id: "cs_reverse", url: "https://checkout.stripe.com/c/reverse" })
+    : unavailable ? json({}, 503) : json(remote) });
+  const { order, token } = await s.orders.create({ offerId: "ES_5_30", methodId: "stripe" });
+  await s.orders.cardCheckout(order.id, token, "https://shop.example/o/x");
+  const session = { id: "cs_reverse", mode: "payment", currency: "usd", status: "complete",
+    payment_status: "paid", client_reference_id: order.id, metadata: { order_id: order.id },
+    amount_total: 540, payment_intent: "pi_reverse" };
+  const send = (type, object) => {
+    const body = JSON.stringify({ type, data: { object } });
+    const t = Math.floor(Date.now() / 1000);
+    const signature = createHmac("sha256", "whsec_x").update(`${t}.${body}`).digest("hex");
+    return s.orders.cardPaid(body, `t=${t},v1=${signature}`);
+  };
+  assert.equal((await send("checkout.session.completed", session)).order.status, "delivered");
+  const charge = { id: "ch_reverse", amount_refunded: 100 };
+  remote = { ...session, payment_intent: { id: "pi_reverse", latest_charge: charge } };
+  const signal = { payment_intent: "pi_reverse", amount_refunded: 1 };
+  unavailable = true;
+  assert.deepEqual(await send("charge.refunded", signal), { error: "payment_reconciliation_pending" });
+  unavailable = false;
+  const partial = await send("charge.refunded", signal);
+  assert.equal(partial.order.payment.status, "payment_review");
+  assert.equal(partial.order.payment.refunded_cents, 100);
+  charge.amount_refunded = 540;
+  charge.refunded = true;
+  const full = await send("charge.refunded", signal);
+  assert.equal(full.order.status, "delivered");
+  assert.equal(full.order.payment.status, "refunded");
+  assert.equal(full.order.payment.refunded_cents, 540);
+  assert.equal(s.supplier.calls.order, 1);
+});
