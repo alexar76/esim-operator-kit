@@ -12,7 +12,7 @@ runs a **seller node**; buyers — AI agents booking trips, apps, a storefront f
 the cheapest plan across every connected seller and buy it with one x402 payment. The hub routes and
 takes its routing fee; the seller is the merchant (its prices, its VAT, its refunds).
 
-Status: **v0.3.0.** The wholesale client, offers, pricing, the order flow and the seller node (free
+Status: **v0.4.0.** The wholesale client, offers, pricing, the order flow and the seller node (free
 signed quote and status, the paid order behind x402) are written and tested. A live test order
 (2026-10-14) went through `fulfil`, `status` and `release` against eSIM Access: the cheapest plan
 ($0.30) was allocated in about 2.5 s, the same payment sent again found the same profile, a wrong

@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.4.0 — 2026-11-03
+
+`@aimarket/esim-rails` 0.4.0. Builds on 0.3.0 below (published 2026-10-15).
+
+- **One purchase per paid order.** The node writes a durable `procurement_pending` record
+  before it orders from the wholesaler, with the same supplier transaction id. If the
+  supplier's answer is lost, reconciliation completes that order instead of placing a
+  second one, and a supplier refusal is recorded as `rejected`, so the reservation is
+  released without a cancellation call.
+- Cancellation emits `agent_order.cancelled` only when the wholesaler confirmed the
+  release.
+- Webhook schema: new events `order.procurement_pending`, `order.settlement_pending` and
+  `order.payment_failed`.
+- **Payments on Zod 4.** `@x402/core`, `@x402/evm` and `@x402/extensions` are patched
+  builds (`2.28.0+aimarket.zod4.1`, sources in `rails/vendor/`), and the CDP facilitator
+  client is `@aimarket/x402-cdp` in place of `@coinbase/cdp-sdk`. They are not on the npm
+  registry, so the package bundles them with their dependencies: about 13 MB packed, against
+  30 KB for 0.3.0. `@x402/svm` (Solana) is no longer a dependency.
+
 ## 0.3.0 — 2026-10-15
 
 - **Payment safety audit (2026-10-15):** EVM claims require the sending wallet's signature bound to the order and transaction; no exchange withdrawals for this method. Payment references are consumed once, recent Tron amounts remain reserved, and storefront mutations are serialized. Signed payments are tied to the order nonce and validity window.
