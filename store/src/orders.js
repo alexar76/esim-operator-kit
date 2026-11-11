@@ -1,7 +1,9 @@
 // An order in the storefront: one offer, one payment method, one eSIM.
 //
 //   awaiting_payment → delivered                        (the usual path)
-//   awaiting_payment → refund_due                       (paid, but the wholesaler could not deliver)
+//   awaiting_payment → refund_due                       (paid, but the wholesaler refused definitely)
+//   awaiting_payment → procurement_pending → delivered  (paid, profile still allocating: reconcile asks again;
+//                                          → refund_due  after a definite refusal or a day of waiting)
 //   awaiting_payment → underpaid                        (a push payment below the asked amount)
 //   awaiting_payment → expired                          (nothing paid within a day)
 //
@@ -19,6 +21,7 @@ import { asSupplier } from "../../rails/src/supplier.js";
 const HOLD_MS = 20 * 60_000;           // how long a price and its payment terms hold
 const WATCH_MS = 24 * 3_600_000;       // how long a pushed payment is looked for
 const CARD_RECHECK_MS = 5 * 60_000;
+const DELIVERY_RETRY_MS = 24 * 3_600_000; // how long a paid order waits for its profile before refund_due
 const sha = (s) => createHash("sha256").update(s).digest("hex");
 
 /**
@@ -70,6 +73,26 @@ export function createOrders({ db, supplier: configured, railsStore, statusSecre
     };
   }
 
+  // A payment that is final (card, claimed or pushed transfer) whose profile the wholesaler has
+  // bought but not finished allocating — or a supplier that is down for a moment — waits in
+  // procurement_pending and reconcile() asks again with the SAME payment (fulfil() is idempotent
+  // on it, so nothing is bought twice). Until 2026-11-11 it became a terminal refund_due after
+  // the 45 s allocation wait, with the eSIM already bought and no loop retrying the delivery
+  // (audit desks-stripe-1). Only a definite refusal still means refund_due.
+  async function deliverOrHold(o, ref) {
+    try { await deliver(o, ref); delete o.error; delete o.delivery_retry; }
+    catch (err) {
+      if (err?.code === "allocation_pending" || err?.retryable) {
+        o.status = "procurement_pending";
+        o.error = err.code || "allocation_pending";
+        o.delivery_retry = o.delivery_retry || { since_ms: now(), ref };
+      } else {
+        o.status = "refund_due";
+        o.error = err?.code || "delivery_failed";
+      }
+    }
+  }
+
   async function deliver(o, ref) {
     // The cost the order was quoted at: a plan whose price moved since is refused, not charged.
     const cost = o.cost_usd ?? (o.wholesale_units ? o.wholesale_units / 10_000 : undefined);
@@ -96,8 +119,7 @@ export function createOrders({ db, supplier: configured, railsStore, statusSecre
     if (paid.amountCents < o.price_cents) {
       o.status = "underpaid";
     } else {
-      try { await deliver(o, paid.ref); }
-      catch (err) { o.status = "refund_due"; o.error = err.code || "delivery_failed"; }
+      await deliverOrHold(o, paid.ref);
     }
     await save(o);
     return { order: view(o) };
@@ -248,7 +270,7 @@ export function createOrders({ db, supplier: configured, railsStore, statusSecre
       o.payment = { ref: r.ref, payer: r.payer, units: r.units };
       await save(o);
       delete o.claim;
-      try { await deliver(o, r.ref); } catch (err) { o.status = "refund_due"; o.error = err.code || "delivery_failed"; }
+      await deliverOrHold(o, r.ref);
       await save(o);
       return { order: view(o) };
     },
@@ -262,7 +284,17 @@ export function createOrders({ db, supplier: configured, railsStore, statusSecre
 
     /** Resume uncertain signed payments after a lost response or process restart. No second charge. */
     async reconcile() {
-      for (const o of (await db.all()).filter(x => ["procurement_pending", "settlement_pending"].includes(x.status))) {
+      // Final payments still waiting for their profile (deliverOrHold): ask again, give up after a day.
+      for (const o of (await db.all()).filter(x => x.status === "procurement_pending" && x.delivery_retry)) {
+        await deliverOrHold(o, o.delivery_retry.ref);
+        if (o.status === "procurement_pending" && now() - o.delivery_retry.since_ms > DELIVERY_RETRY_MS) {
+          o.status = "refund_due";
+          o.error = "allocation_timeout";
+        }
+        await save(o);
+      }
+      for (const o of (await db.all()).filter(x => ["procurement_pending", "settlement_pending"].includes(x.status)
+                                                  && !x.delivery_retry)) {
         const m = methods.find(m => m.id === o.method); // Read-only recovery also works when new sales are disabled.
         if (!m?.reconcile || !o.reconciliation) continue;
         const r = o.reconciliation.outcome || await m.reconcile(o.reconciliation);
@@ -349,7 +381,7 @@ export function createOrders({ db, supplier: configured, railsStore, statusSecre
         o.payment = { ref: found.ref, payer: found.payer, units: found.units };
         await save(o);
         if (found.status === "underpaid") { o.status = "underpaid"; await save(o); continue; }
-        try { await deliver(o, found.ref); } catch (err) { o.status = "refund_due"; o.error = err.code || "delivery_failed"; }
+        await deliverOrHold(o, found.ref);
         await save(o);
       }
     },
