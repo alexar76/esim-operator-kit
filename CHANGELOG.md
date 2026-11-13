@@ -1,5 +1,17 @@
 # Changelog
 
+## Unreleased
+
+- **Try the kit before a server exists.** `./onboard.sh --try` runs the storefront and the seller node
+  on your own computer (`docker-compose.try.yml`): http://localhost:9495 and http://localhost:9490, a
+  made-up catalogue (`SUPPLIER=sample`, 49 plans with ids `SAMPLE-…` and invented costs), demo mode, no
+  keys, nothing announced to a hub, nothing written to `.env`, `secrets/` or `data/`. It ends with
+  `esim-rails check` against that node. `./onboard.sh --try --down` stops it. Before this, the first
+  step needed a server, a domain with an A record, free ports 80/443 and a wholesale account.
+- `SUPPLIER=sample` refuses to start unless `DEMO_MODE=1`, and its `order()` is a plain "no".
+- The storefront banner says "made-up sample plans and prices" with the sample catalogue instead of
+  "Prices are live" (five languages).
+
 ## 0.4.0 — 2026-11-03
 
 `@aimarket/esim-rails` 0.4.0. Builds on 0.3.0 below (published 2026-10-15).

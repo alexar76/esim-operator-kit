@@ -188,6 +188,7 @@ The whole kit (path A):
 
 ```bash
 git clone https://github.com/alexar76/esim-operator-kit.git && cd esim-operator-kit
+./onboard.sh --try      # first, on your own computer: no server, domain or keys; sample plans, ~1 min
 ./onboard.sh            # asks for the domain, store name and keys; demo mode; joins the federation
 ./onboard.sh --hub      # the same with your own hub
 ```

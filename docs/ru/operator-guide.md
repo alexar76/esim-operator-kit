@@ -12,6 +12,7 @@
 
 ```bash
 git clone https://github.com/alexar76/esim-operator-kit.git && cd esim-operator-kit
+./onboard.sh --try      # до сервера: набор на своём компьютере, образцовые тарифы, без ключей; --try --down остановит
 ./onboard.sh            # витрина, узел продавца для агентов, узел федерации; спрашивает только недостающее
 ./onboard.sh --hub      # то же со своим хабом: own-hub.md
 ```

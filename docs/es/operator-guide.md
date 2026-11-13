@@ -12,6 +12,7 @@ Cuando tengas el servidor, el dominio y la cuenta mayorista (secciones 2 a 4), u
 
 ```bash
 git clone https://github.com/alexar76/esim-operator-kit.git && cd esim-operator-kit
+./onboard.sh --try      # antes del servidor: el kit en tu ordenador, planes de ejemplo, sin claves; --try --down lo detiene
 ./onboard.sh            # tienda, nodo vendedor para agentes, nodo de federación; solo pregunta lo que falta
 ./onboard.sh --hub      # lo mismo con tu propio hub: own-hub.md
 ```

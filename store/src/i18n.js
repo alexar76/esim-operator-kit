@@ -6,6 +6,7 @@ export const HTML_LANG = { en: "en", ru: "ru", es: "es", fr: "fr", zh: "zh-Hans"
 const en = {
   name: "English",
   demoBanner: "Demo mode: a reference storefront for eSIM operators. Prices are live, payments are off.",
+  sampleBanner: "Trying the kit: made-up sample plans and prices, payments off. Nothing here is for sale.",
   demoCta: "Run your own operator",
   tagline: "Mobile data for your trip. Pay with USD₮ or USDC on Tron, TON, Solana, Base and other networks.",
   lead: "Pick where you are going, pay from your crypto wallet, scan the QR code. No account, no SIM card, no roaming bill.",
@@ -122,6 +123,7 @@ const en = {
 const ru = {
   name: "Русский",
   demoBanner: "Демо-режим: референсная витрина для eSIM-операторов. Цены живые, оплата отключена.",
+  sampleBanner: "Проба набора: тарифы и цены выдуманы для примера, оплата отключена. Здесь ничего не продаётся.",
   demoCta: "Запустить своего оператора",
   tagline: "Мобильный интернет в поездку. Оплата в USD₮ или USDC в Tron, TON, Solana, Base и других сетях.",
   lead: "Выберите страну, оплатите из криптокошелька, отсканируйте QR-код. Без аккаунта, без SIM-карты, без счетов за роуминг.",
@@ -238,6 +240,7 @@ const ru = {
 const es = {
   name: "Español",
   demoBanner: "Modo demo: una tienda de referencia para operadores de eSIM. Precios reales, pagos desactivados.",
+  sampleBanner: "Probando el kit: planes y precios inventados de ejemplo, pagos desactivados. Aquí no se vende nada.",
   demoCta: "Lanza tu propio operador",
   tagline: "Datos móviles para tu viaje. Paga con USD₮ o USDC en Tron, TON, Solana, Base y otras redes.",
   lead: "Elige tu destino, paga desde tu monedero cripto y escanea el código QR. Sin cuenta, sin tarjeta SIM, sin factura de roaming.",
@@ -354,6 +357,7 @@ const es = {
 const fr = {
   name: "Français",
   demoBanner: "Mode démo : une boutique de référence pour les opérateurs eSIM. Prix réels, paiements désactivés.",
+  sampleBanner: "Essai du kit : forfaits et prix inventés pour l’exemple, paiements désactivés. Rien n’est à vendre ici.",
   demoCta: "Lancer votre propre opérateur",
   tagline: "Des données mobiles pour votre voyage. Payez en USD₮ ou USDC sur Tron, TON, Solana, Base et d'autres réseaux.",
   lead: "Choisissez votre destination, payez depuis votre portefeuille crypto, scannez le QR code. Sans compte, sans carte SIM, sans facture de roaming.",
@@ -470,6 +474,7 @@ const fr = {
 const zh = {
   name: "中文",
   demoBanner: "演示模式：面向 eSIM 运营商的参考店铺。价格为实时价格，支付已关闭。",
+  sampleBanner: "试用套件：套餐和价格均为虚构示例，支付已关闭。这里不出售任何东西。",
   demoCta: "运行你自己的运营商",
   tagline: "旅行用的移动流量。可在 Tron、TON、Solana、Base 等网络上用 USD₮ 或 USDC 支付。",
   lead: "选择目的地，用加密钱包付款，扫描二维码。无需账号，无需 SIM 卡，没有漫游账单。",

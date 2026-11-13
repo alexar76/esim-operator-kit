@@ -1,0 +1,39 @@
+# Try the kit on your own computer before you have a server, a domain or a wholesale account:
+#
+#   ./onboard.sh --try          (the same as below, then a check of the seller node)
+#   docker compose -p esim-try -f docker-compose.yml -f docker-compose.try.yml up -d --build store rails
+#
+# The storefront on http://localhost:9495 and the seller node for agents on http://localhost:9490,
+# both on this computer only. A made-up catalogue (SUPPLIER=sample: plan ids SAMPLE-…, invented
+# costs), demo mode, no payments, no keys, nothing announced to any hub. Nothing is written to .env,
+# secrets/ or data/: the containers keep their state in memory and lose it when they stop.
+services:
+  store:
+    env_file: !reset []
+    environment:
+      PUBLIC_URL: http://localhost:9495
+      SUPPLIER: sample
+      DEMO_MODE: "1"
+      STORE_NAME: Sample eSIM store
+    volumes: !override
+      - ./config:/config:ro
+    tmpfs: !override
+      - /tmp
+      - /data:uid=1000,gid=1000,mode=0700
+    ports: ["127.0.0.1:9495:9495"]
+
+  rails:
+    env_file: !reset []
+    environment:
+      PUBLIC_URL: http://localhost:9490
+      PAY_TO: ""
+      SUPPLIER: sample
+      DEMO_MODE: "1"
+      SELLER_NAME: Sample eSIM store
+      PRODUCT_ID: esim-sample
+    volumes: !override
+      - ./config:/config:ro
+    tmpfs: !override
+      - /tmp
+      - /data:uid=1000,gid=1000,mode=0700
+    ports: ["127.0.0.1:9490:9490"]

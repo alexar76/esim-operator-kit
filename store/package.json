@@ -8,6 +8,7 @@
     "node": ">=20"
   },
   "scripts": {
+    "pretest": "node -e \"require('fs').existsSync('../rails/node_modules') || require('child_process').execSync('npm ci --prefix ../rails --no-audit --no-fund', { stdio: 'inherit' })\"",
     "test": "node --test \"test/**/*.test.js\""
   },
   "dependencies": {

@@ -85,6 +85,7 @@ const allow = (key) => {
 
 // eSIM Access asks every reseller's site for terms and a privacy policy: the footer links them.
 const store = { name: env.STORE_NAME || "Travel eSIM", contact: env.STORE_CONTACT || "", demo, kitUrl: env.KIT_URL || "",
+                sample: String(env.SUPPLIER || "").toLowerCase() === "sample",
                 termsUrl: env.STORE_TERMS_URL || "", privacyUrl: env.STORE_PRIVACY_URL || "" };
 // The demo serves the kit's guides at /kit; a store that sells does not.
 const kit = demo ? loadKit() : null;

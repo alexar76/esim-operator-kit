@@ -12,6 +12,7 @@ Once you have the server, the domain and the wholesale account (sections 2 to 4)
 
 ```bash
 git clone https://github.com/alexar76/esim-operator-kit.git && cd esim-operator-kit
+./onboard.sh --try      # before a server: the kit on your computer, sample plans, no keys; --try --down stops it
 ./onboard.sh            # store, seller node for agents, federation node; asks only for what is missing
 ./onboard.sh --hub      # the same with your own hub: own-hub.md
 ```

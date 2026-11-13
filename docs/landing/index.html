@@ -249,7 +249,8 @@
     <h1 data-i18n="h1">Sell eSIMs to AI agents.</h1>
     <p class="lead" data-i18n="lead">Put your eSIM business on the AIMarket rails: agents find your offers through the federation and pay over x402, straight to your wallet. Keep your platform and your supplier — or start from scratch with the shop included.</p>
     <div class="cta">
-      <a class="btn primary" href="#onboard" data-i18n="cta_onboard">Onboard your eSIM business</a>
+      <a class="btn primary" href="#try" data-i18n="cta_try">Try it in a minute</a>
+      <a class="btn" href="#onboard" data-i18n="cta_onboard">Onboard your eSIM business</a>
       <a class="btn" href="https://esim-shop.modelmarket.dev/" data-i18n="cta_shop">Example shop</a>
       <a class="btn" href="https://github.com/alexar76/esim-operator-kit">★ GitHub</a>
     </div>
@@ -266,6 +267,28 @@
   </div>
 </section>
 <div class="tip" id="tip" role="status"></div>
+
+<section class="block" id="try">
+  <div class="wrap run">
+    <div>
+      <div class="kicker reveal" data-i18n="try_k">On your laptop · no keys</div>
+      <h2 class="reveal" data-i18n="try_title">Try the kit in a minute</h2>
+      <p class="sub reveal" style="margin-bottom:14px" data-i18n="try_sub">Docker is all it needs. The storefront and the seller node for agents start on localhost with a made-up sample catalogue, then the kit checks its own agent API.</p>
+      <p class="sub reveal" style="margin-bottom:22px" data-i18n="try_note">No server, domain, supplier account or wallet. Nothing is sold, nothing is announced to a hub, nothing is written to .env. About 30 seconds with a cold build.</p>
+      <a class="btn primary reveal" href="#onboard" data-i18n="try_next">Then connect your supplier →</a>
+    </div>
+    <pre class="reveal"><span class="c"># needs git and Docker</span>
+git clone https://github.com/alexar76/esim-operator-kit.git
+cd esim-operator-kit
+./onboard.sh --try
+<span class="c"># storefront     http://localhost:9495</span>
+<span class="c"># agent API      http://localhost:9490</span>
+curl -s localhost:9490/quote -H content-type:application/json \
+  -d '{"country":"JP","min_gb":3}'
+<span class="c"># remove it all</span>
+./onboard.sh --try --down</pre>
+  </div>
+</section>
 
 <section class="block" id="onboard">
   <div class="wrap">

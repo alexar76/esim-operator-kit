@@ -11,6 +11,7 @@ export { asSupplier, esimAccessSupplier, planFromEsimAccess, profileFromEsimAcce
 export { createClient as createEsimAccessClient, keysFromFiles, PRICE_UNITS } from "./esimaccess.js";
 export { httpSupplier, signSupplierRequest, verifySupplierRequest } from "./http-supplier.js";
 export { airaloSupplier, esimGoSupplier } from "./suppliers-more.js";
+export { sampleSupplier, samplePlans } from "./sample-supplier.js";
 export { supplierFromEnv, webhooksFromEnv, pricingFromEnv } from "./config.js";
 export { createWebhooks, signWebhook, verifyWebhook } from "./webhooks.js";
 export { offersFromPlans, offersFromEsimAccess, planShape, priceCents, priceFor, DEFAULT_PRICING, quote, publicOffer } from "./offers.js";

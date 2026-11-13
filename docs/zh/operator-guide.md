@@ -11,6 +11,7 @@
 
 ```bash
 git clone https://github.com/alexar76/esim-operator-kit.git && cd esim-operator-kit
+./onboard.sh --try      # 有服务器之前：在你的电脑上运行套件，示例套餐，无需密钥；--try --down 停止
 ./onboard.sh            # 店铺、面向智能体的卖家节点、联邦节点；只询问缺少的内容
 ./onboard.sh --hub      # 同上，但使用你自己的枢纽：own-hub.md
 ```

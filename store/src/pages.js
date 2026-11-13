@@ -58,7 +58,7 @@ ${links}
 ${scripts.map((s) => `<script src="${esc(s)}" defer></script>`).join("\n")}
 </head>
 <body${store.demo ? ' class="demo"' : ""}>
-${store.demo ? `<div class="demo-bar" role="note">${esc(t.demoBanner)}${kitHref ? ` <a href="${esc(kitHref)}">${esc(t.demoCta)} →</a>` : ""}</div>` : ""}
+${store.demo ? `<div class="demo-bar" role="note">${esc(store.sample ? t.sampleBanner : t.demoBanner)}${kitHref ? ` <a href="${esc(kitHref)}">${esc(t.demoCta)} →</a>` : ""}</div>` : ""}
 <header class="top">
 <a class="brand" href="${esc(pathFor(lang))}"><span class="logo" aria-hidden="true">◎</span>${esc(store.name)}</a>
 <div class="header-actions"><button class="theme-toggle" type="button" data-theme-toggle aria-label="${esc(t.design.theme)}"><span aria-hidden="true">◐</span></button><details class="langs"><summary>${esc(t.name)}</summary><nav>${langs}</nav></details></div>

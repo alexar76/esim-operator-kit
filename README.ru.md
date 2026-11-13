@@ -187,6 +187,7 @@ flowchart TB
 
 ```bash
 git clone https://github.com/alexar76/esim-operator-kit.git && cd esim-operator-kit
+./onboard.sh --try      # сначала на своём компьютере: без сервера, домена и ключей; образцовые тарифы, ~1 мин
 ./onboard.sh            # спросит домен, название и ключи; демо-режим; вступит в федерацию
 ./onboard.sh --hub      # то же со своим хабом
 ```

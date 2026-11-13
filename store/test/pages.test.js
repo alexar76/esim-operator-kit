@@ -39,7 +39,7 @@ test("every language has the English keys, none empty", () => {
   }
 });
 
-async function serve({ stripe = false, stripeFetch = null, demo = false, kit = null, kitOrigin } = {}) {
+async function serve({ stripe = false, stripeFetch = null, demo = false, sample = false, kit = null, kitOrigin } = {}) {
   const orders = new Map();
   const supplier = {
     packages: async () => PACKAGES,
@@ -65,7 +65,7 @@ async function serve({ stripe = false, stripeFetch = null, demo = false, kit = n
   ];
   const store = createOrders({ db: jsonDb(join(dir, "o.json"), fs), supplier, railsStore: fileStore(join(dir, "r.json"), fs),
                                statusSecret: "http-status-secret-0123456789", methods, offersById: (id) => catalog.byId(id) });
-  const app = createApp({ store: { name: "Test Store", demo, kitUrl: demo ? "https://kit.example/" : "" }, origin: "https://shop.example", catalog, orders: store, methods,
+  const app = createApp({ store: { name: "Test Store", demo, sample, kitUrl: demo ? "https://kit.example/" : "" }, origin: "https://shop.example", catalog, orders: store, methods,
                          demoOptions: DEMO_OPTIONS, kit, ...(kitOrigin ? { kitOrigin } : {}) });
   await catalog.load();
   const server = await new Promise((r) => { const s = app.listen(0, "127.0.0.1", () => r(s)); });
@@ -195,6 +195,16 @@ test("demo mode: a banner on every page, the crypto methods on show, and every p
   } finally { await s.close(); }
   const live = await serve();
   try { assert.ok(!(await (await live.call("/")).text()).includes("demo-bar")); } finally { await live.close(); }
+});
+
+test("--try with the sample catalogue: the banner says the plans are made up, never that prices are live", async () => {
+  const s = await serve({ demo: true, sample: true });
+  try {
+    const en = await (await s.call("/")).text();
+    assert.match(en, /made-up sample plans/);
+    assert.ok(!en.includes("Prices are live"));
+    assert.match(await (await s.call("/ru/")).text(), /выдуманы для примера/);
+  } finally { await s.close(); }
 });
 
 test("kit: the demo serves the guides in five languages; a store without them serves none", async () => {

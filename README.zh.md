@@ -180,6 +180,7 @@ flowchart TB
 
 ```bash
 git clone https://github.com/alexar76/esim-operator-kit.git && cd esim-operator-kit
+./onboard.sh --try      # 先在自己的电脑上试：无需服务器、域名或密钥；示例套餐，约 1 分钟
 ./onboard.sh            # 询问域名、店铺名称和密钥；演示模式；加入联邦
 ./onboard.sh --hub      # 同上，使用你自己的枢纽
 ```

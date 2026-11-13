@@ -4,6 +4,7 @@
 //   SUPPLIER=http                  SUPPLIER_URL, SUPPLIER_SECRET_FILE — your own system (spec/supplier-http.md)
 //   SUPPLIER=airalo                AIRALO_CLIENT_ID_FILE, AIRALO_CLIENT_SECRET_FILE[, AIRALO_BASE_URL]
 //   SUPPLIER=esimgo                ESIMGO_API_KEY_FILE[, ESIMGO_BASE_URL]
+//   SUPPLIER=sample                made-up plans, no keys, sells nothing; DEMO_MODE=1 only (./onboard.sh --try)
 //   WEBHOOK_URL, WEBHOOK_SECRET_FILE  events for your CRM, billing, accounting (webhooks.js); off when unset
 //   MARGIN_PCT, MIN_MARGIN_USD        your price = cost × (1 + MARGIN_PCT/100), at least cost + MIN_MARGIN_USD
 //                                     (100 and 1.00 when unset)
@@ -14,6 +15,7 @@ import { httpSupplier } from "./http-supplier.js";
 import { DEFAULT_PRICING } from "./offers.js";
 import { parsePriceList } from "./prices.js";
 import { esimAccessSupplier } from "./supplier.js";
+import { sampleSupplier } from "./sample-supplier.js";
 import { airaloSupplier, esimGoSupplier } from "./suppliers-more.js";
 import { createWebhooks } from "./webhooks.js";
 
@@ -27,7 +29,12 @@ export function supplierFromEnv(env = process.env) {
                             ...(env.AIRALO_BASE_URL ? { base: env.AIRALO_BASE_URL } : {}) });
   }
   if (kind === "esimgo") return esimGoSupplier({ apiKey: fileValue(env.ESIMGO_API_KEY_FILE), ...(env.ESIMGO_BASE_URL ? { base: env.ESIMGO_BASE_URL } : {}) });
-  if (kind !== "esimaccess") throw new Error(`SUPPLIER must be esimaccess, airalo, esimgo or http, not ${kind}`);
+  if (kind === "sample") {
+    // Made-up plans that sell nothing: only with DEMO_MODE=1, so a store can never go live on them.
+    if (env.DEMO_MODE !== "1") throw new Error("SUPPLIER=sample needs DEMO_MODE=1: the sample catalogue sells nothing");
+    return sampleSupplier();
+  }
+  if (kind !== "esimaccess") throw new Error(`SUPPLIER must be esimaccess, airalo, esimgo, http or sample, not ${kind}`);
   return esimAccessSupplier(createClient(keysFromFiles({ accessCodeFile: env.ESIMACCESS_ACCESS_CODE_FILE, secretKeyFile: env.ESIMACCESS_SECRET_KEY_FILE })));
 }
 

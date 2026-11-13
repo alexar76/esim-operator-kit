@@ -6,6 +6,8 @@
 #   ./onboard.sh --hub           the same with your own hub instead of the federation node
 #   ./onboard.sh --no-announce   do everything but knock on modelmarket.dev
 #   ./onboard.sh --check         change nothing: say what is ready and what is missing
+#   ./onboard.sh --try           on your own computer first: no server, domain or keys; sample plans
+#   ./onboard.sh --try --down    stop the --try containers
 #
 # Ports 80 and 443 already taken by your web server? It offers to put the kit behind it (nginx: it
 # writes the site and gets the certificate with certbot, after asking) instead of the kit's Caddy.
@@ -17,15 +19,17 @@ set -euo pipefail
 cd "$(dirname "$0")"
 
 FEDERATION_HUB="${ONBOARD_FEDERATION_HUB:-https://modelmarket.dev}"
-MODE= ANNOUNCE=ask CHECK_ONLY=0 CHECK_ERRORS=0
+MODE= ANNOUNCE=ask CHECK_ONLY=0 CHECK_ERRORS=0 TRY=0
 for a in "$@"; do
   case "$a" in
+    --try) TRY=up ;;
+    --down) [ "$TRY" != 0 ] || { echo "--down goes with --try" >&2; exit 2; }; TRY=down ;;
     --hub) MODE=hub ;;
     --node) MODE=node ;;
     --no-announce) ANNOUNCE=no ;;
     --announce) ANNOUNCE=yes ;;
     --check) CHECK_ONLY=1 ;;
-    -h|--help) sed -n '2,16p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    -h|--help) sed -n '2,17p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *) echo "unknown option: $a (see --help)" >&2; exit 2 ;;
   esac
 done
@@ -41,6 +45,7 @@ yes_no() { local v; read -r -p "  $1 [Y/n] " v; case "$v" in n|N|no|No) return 1
 SUDO=""
 [ "$(id -u)" = 0 ] || SUDO="sudo"
 DC="docker compose"
+
 
 env_get() { grep -E "^$1=" .env 2>/dev/null | tail -1 | cut -d= -f2- || true; }
 env_set() {  # replace or append KEY=VALUE in .env, keeping everything else as it is
@@ -139,6 +144,41 @@ front_reload() {  # after the federation side changed: point HTTPS at it
       [ "${ONBOARD_ROUTES_DONE:-0}" = 1 ] || exit 0 ;;
   esac
 }
+
+# ── --try: the kit on this computer, before any server, domain or wholesale account ─────────
+# Store and seller node on localhost, a made-up catalogue, demo mode, nothing announced, nothing
+# written to .env, secrets/ or data/ (docker-compose.try.yml). --try --down stops it.
+if [ "$TRY" != 0 ]; then
+  command -v docker >/dev/null || fail "Docker is not installed: https://docs.docker.com/get-docker/"
+  $DC version >/dev/null 2>&1 || fail "docker compose is missing (Docker Desktop, or Docker 24 or later)"
+  # The base file reads these; the try file overrides what the containers get.
+  export DOMAIN=localhost STORE_NAME="Sample eSIM store" PRODUCT_ID=esim-sample PAY_TO_EVM=""
+  TRYDC="$DC -p esim-try -f docker-compose.yml -f docker-compose.try.yml"
+  if [ "$TRY" = down ]; then
+    $TRYDC down --rmi local; step "Stopped. Nothing was left on this computer but Docker's build cache."; exit 0
+  fi
+  step "1. Store and seller node on this computer (sample catalogue, demo mode)"
+  $TRYDC up -d --build store rails
+  printf '  waiting for the seller node '
+  health=""
+  for _ in $(seq 1 60); do
+    health="$(curl -s --max-time 5 http://127.0.0.1:9490/healthz || true)"
+    case "$health" in *'"ok":true'*) break ;; esac
+    printf '.'; sleep 2
+  done; echo
+  case "$health" in *'"ok":true'*) ;; *) fail "the seller node did not answer: $TRYDC logs rails" ;; esac
+  ok "seller node: $(printf '%s' "$health" | json_field offers) sample offers, $(printf '%s' "$health" | json_field countries) countries"
+  step "2. The check every seller node passes before it joins the federation"
+  $TRYDC exec -T rails node bin/esim-rails.mjs check http://127.0.0.1:9490 --country JP </dev/null || true
+  step "Try it"
+  printf '  Storefront for people:   %shttp://localhost:9495%s  (the guides at /kit)\n' "$B" "$N"
+  printf '  What an agent asks:      curl -s localhost:9490/quote -H content-type:application/json -d %s\n' "'{\"country\":\"JP\",\"min_gb\":3}'"
+  printf '  What an agent pays for:  curl -si localhost:9490/order -X POST  (demo mode: it says so and sells nothing)\n'
+  step "Next"
+  printf '  Sell for real: a server, a domain and a wholesale account, then ./onboard.sh there.\n'
+  printf '  Your own systems instead: docs/en/integrations.md. Stop this: ./onboard.sh --try --down\n'
+  exit 0
+fi
 
 # ── 1. The server ───────────────────────────────────────────────────────────────────────────
 step "1. The server"

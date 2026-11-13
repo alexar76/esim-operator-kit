@@ -262,7 +262,9 @@ export function createNode({
     try { cat = await offers(); } catch { return refuse(res, 503, "catalogue_unavailable", "the wholesale catalogue cannot be read right now"); }
     const offer = cat.byId.get(id);
     if (!offer) return refuse(res, 400, "unknown_offer", "send offer_id from esim.quote");
-    if (demo) return refuse(res, 403, "demo_mode", "demo mode: this node quotes live prices and sells nothing; run your own node to sell");
+    if (demo) return refuse(res, 403, "demo_mode", supplier.kind === "sample"
+      ? "demo mode: this node quotes made-up sample prices and sells nothing; connect a wholesale account to sell"
+      : "demo mode: this node quotes live prices and sells nothing; run your own node to sell");
     if (!paywall) return refuse(res, 503, "payments_off", "this node does not take payments yet");
     req.offer = offer;
     return next();

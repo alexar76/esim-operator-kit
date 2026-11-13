@@ -11,8 +11,10 @@ import { KIT_PAGES, KIT_REPO } from "./kit.js";
 const KIT_SLUGS = Object.keys(KIT_PAGES).filter(Boolean).join("|");
 import { ASSETS, MERMAID_VERSION, countryPage, homePage, kitPage, notFound, orderPage, pathFor, sitemap } from "./pages.js";
 
-const TONCONNECT_UI = fileURLToPath(new URL("../node_modules/@tonconnect/ui/dist/tonconnect-ui.min.js", import.meta.url));
-const MERMAID = fileURLToPath(new URL("../node_modules/mermaid/dist/mermaid.min.js", import.meta.url));
+// Sent with `root`: send() refuses any path with a dot-directory in it (a checkout under ~/.cache or a
+// worktree under .claude/), but with a root it only checks the part below the root.
+const TONCONNECT_UI = { root: fileURLToPath(new URL("../node_modules/@tonconnect/ui/dist/", import.meta.url)), file: "tonconnect-ui.min.js" };
+const MERMAID = { root: fileURLToPath(new URL("../node_modules/mermaid/dist/", import.meta.url)), file: "mermaid.min.js" };
 const ICON_SVG = readFileSync(new URL("../public/icon.svg", import.meta.url));
 const ICON_PNG = readFileSync(new URL("../public/icon-180.png", import.meta.url));
 
@@ -90,11 +92,11 @@ export function createApp({ store, origin, catalog, orders, methods, allow = () 
 
   app.get("/assets/:file", (req, res) => {
     if (req.params.file === "tonconnect-ui.min.js") {
-      return res.set("Cache-Control", "public, max-age=86400").type("text/javascript").sendFile(TONCONNECT_UI);
+      return res.set("Cache-Control", "public, max-age=86400").type("text/javascript").sendFile(TONCONNECT_UI.file, { root: TONCONNECT_UI.root });
     }
     if (req.params.file === "mermaid.min.js" && kit) {
       return res.set("Cache-Control", req.query.v === MERMAID_VERSION ? "public, max-age=31536000, immutable" : "public, max-age=300")
-        .type("text/javascript").sendFile(MERMAID);
+        .type("text/javascript").sendFile(MERMAID.file, { root: MERMAID.root });
     }
     if (req.params.file === "icon.svg") return res.type("image/svg+xml").set("Cache-Control", "public, max-age=86400").send(ICON_SVG);
     if (req.params.file === "icon-180.png") return res.type("image/png").set("Cache-Control", "public, max-age=86400").send(ICON_PNG);

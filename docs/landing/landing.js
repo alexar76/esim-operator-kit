@@ -276,6 +276,7 @@ const T = {
 // The onboarding of existing operators: these strings override and extend the ones above.
 const T_ONBOARD = {
   en: {
+    cta_try: "Try it in a minute", try_k: "On your laptop · no keys", try_title: "Try the kit in a minute", try_sub: "Docker is all it needs. The storefront and the seller node for agents start on localhost with a made-up sample catalogue, then the kit checks its own agent API.", try_note: "No server, domain, supplier account or wallet. Nothing is sold, nothing is announced to a hub, nothing is written to .env. About 30 seconds with a cold build.", try_next: "Then connect your supplier →",
     h1: "Sell eSIMs to AI agents.",
     lead: "Put your eSIM business on the AIMarket rails: agents find your offers through the federation and pay over x402, straight to your wallet. Keep your platform and your supplier — or start from scratch with the shop included.",
     cta_onboard: "Onboard your eSIM business", cta_shop: "Example shop",
@@ -296,6 +297,7 @@ const T_ONBOARD = {
     d_integrations: "Integrations", d_sdk: "SDK reference", d_rails: "Onboarding",
   },
   ru: {
+    cta_try: "Попробовать за минуту", try_k: "На ноутбуке · без ключей", try_title: "Попробуйте набор за минуту", try_sub: "Нужен только Docker. Витрина и узел продавца для агентов поднимаются на localhost с выдуманным образцовым каталогом, затем набор сам проверяет свой API для агентов.", try_note: "Без сервера, домена, аккаунта поставщика и кошелька. Ничего не продаётся, ничего не анонсируется в хаб, ничего не пишется в .env. Около 30 секунд с холодной сборкой.", try_next: "Потом подключите поставщика →",
     h1: "Продавайте eSIM ИИ-агентам.",
     lead: "Поставьте свой eSIM-бизнес на рельсы AIMarket: агенты находят ваши предложения через федерацию и платят по x402 прямо на ваш кошелёк. Сохраните свою платформу и своего поставщика — или начните с нуля с готовым магазином.",
     cta_onboard: "Подключить свой eSIM-бизнес", cta_shop: "Пример магазина",
@@ -316,6 +318,7 @@ const T_ONBOARD = {
     d_integrations: "Интеграции", d_sdk: "Справочник SDK", d_rails: "Онбординг",
   },
   es: {
+    cta_try: "Pruébalo en un minuto", try_k: "En tu portátil · sin claves", try_title: "Prueba el kit en un minuto", try_sub: "Solo necesita Docker. La tienda y el nodo vendedor para agentes arrancan en localhost con un catálogo de muestra inventado y luego el kit comprueba su propia API para agentes.", try_note: "Sin servidor, dominio, cuenta de proveedor ni monedero. No se vende nada, no se anuncia nada a ningún hub, no se escribe nada en .env. Unos 30 segundos con la compilación en frío.", try_next: "Después conecta tu proveedor →",
     h1: "Vende eSIM a agentes de IA.",
     lead: "Pon tu negocio de eSIM sobre los rieles de AIMarket: los agentes encuentran tus ofertas en la federación y pagan por x402, directamente a tu monedero. Conserva tu plataforma y tu proveedor, o empieza de cero con la tienda incluida.",
     cta_onboard: "Incorpora tu negocio de eSIM", cta_shop: "Tienda de ejemplo",
@@ -336,6 +339,7 @@ const T_ONBOARD = {
     d_integrations: "Integraciones", d_sdk: "Referencia del SDK", d_rails: "Incorporación",
   },
   fr: {
+    cta_try: "Essayer en une minute", try_k: "Sur votre portable · sans clés", try_title: "Essayez le kit en une minute", try_sub: "Docker suffit. La boutique et le nœud vendeur pour agents démarrent sur localhost avec un catalogue d'exemple inventé, puis le kit vérifie sa propre API pour agents.", try_note: "Sans serveur, domaine, compte fournisseur ni portefeuille. Rien n'est vendu, rien n'est annoncé à un hub, rien n'est écrit dans .env. Environ 30 secondes avec une construction à froid.", try_next: "Ensuite, branchez votre fournisseur →",
     h1: "Vendez des eSIM aux agents IA.",
     lead: "Mettez votre activité eSIM sur les rails AIMarket : les agents trouvent vos offres via la fédération et paient via x402, directement sur votre portefeuille. Gardez votre plateforme et votre fournisseur — ou partez de zéro avec la boutique incluse.",
     cta_onboard: "Raccorder votre activité eSIM", cta_shop: "Boutique d'exemple",
@@ -356,6 +360,7 @@ const T_ONBOARD = {
     d_integrations: "Intégrations", d_sdk: "Référence du SDK", d_rails: "Prise en main",
   },
   zh: {
+    cta_try: "一分钟试用", try_k: "在你的笔记本上 · 无需密钥", try_title: "一分钟试用这套工具", try_sub: "只需要 Docker。店铺和面向智能体的卖家节点在 localhost 上启动，使用虚构的示例目录，随后工具会自行检查它的智能体 API。", try_note: "无需服务器、域名、供应商账户或钱包。不出售任何东西，不向任何中心节点宣告，不写入 .env。冷构建约 30 秒。", try_next: "然后接入你的供应商 →",
     h1: "把 eSIM 卖给 AI 智能体。",
     lead: "把你的 eSIM 业务接入 AIMarket 轨道：智能体通过联邦发现你的套餐，并通过 x402 直接付款到你的钱包。保留你的平台和供应商——或者从零开始，店铺已包含在内。",
     cta_onboard: "接入你的 eSIM 业务", cta_shop: "示例店铺",
