@@ -1,6 +1,9 @@
 # Changelog
 
-## Unreleased
+## 0.5.0 — 2026-11-17
+
+`@aimarket/esim-rails` 0.5.0. Builds on 0.4.0 below (published 2026-11-03). The kit's reference node has run this code
+since 2026-11-17 ~19:17Z (modelmarket.dev/providers/esim, demo mode).
 
 - **A quoted price is kept, and a changed one comes back as a fresh quote, not a dead end.** Asked on DEV
   (2026-11-17) what the kit does when an offer goes stale between the quote and the payment.
