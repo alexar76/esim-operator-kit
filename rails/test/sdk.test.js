@@ -129,6 +129,21 @@ test("the conformance check passes the kit's own node and names what a broken on
     const failed = results.filter((r) => !r.ok);
     // The fake paywall answers 402 without x402 terms: the check must say so, and nothing else.
     assert.deepEqual(failed.map((r) => r.name), ["x402 terms"]);
+    for (const name of ["quoted price kept", "a changed quote_token is a 400 before any price"]) {
+      assert.ok(results.find((r) => r.name === name)?.ok, name);
+    }
+    // A seller whose clock is an hour behind the checker's (a laptop that drifted, either side): validity is
+    // judged against the seller's own Date header, not the checker's clock.
+    const behind = await checkSeller(t.base, { country: "FR", fetchImpl: async (url, init) => {
+      const res = await local(url, init);
+      if (!String(url).endsWith("/quote") || init?.method !== "POST") return res;
+      const body = await res.json();
+      for (const o of body.result?.offers ?? []) o.price_valid_until = new Date(Date.parse(o.price_valid_until) - 3_600_000).toISOString();
+      const headers = new Headers(res.headers);
+      headers.set("date", new Date(Date.parse(res.headers.get("date")) - 3_600_000).toUTCString());
+      return new Response(JSON.stringify(body), { status: res.status, headers });
+    } });
+    assert.ok(behind.find((r) => r.name === "quoted price kept")?.ok, "the checker's clock is not the seller's");
     const tampered = await checkSeller(t.base, { country: "FR", fetchImpl: async (url, init) => {
       const res = await local(url, init);
       if (!String(url).endsWith("/quote") || init?.method !== "POST") return res;

@@ -63,7 +63,9 @@ curl -s -X POST https://modelmarket.dev/providers/esim/quote \
         "top_up": true,
         "unused_valid_days": 180,
         "price": { "usd": "2.03", "currency": "USDC" },
-        "usd_per_gb": 0.68
+        "usd_per_gb": 0.68,
+        "quote_token": "q1.1791974564.203.mI2v0n9Qx…",
+        "price_valid_until": "2026-10-14T10:42:44.000Z"
       }
     ],
     "order": { "url": "https://modelmarket.dev/providers/esim/order", "method": "POST", "payment": "x402, USDC on Base" },
@@ -76,6 +78,8 @@ curl -s -X POST https://modelmarket.dev/providers/esim/quote \
 - `unused_valid_days`：购买后必须在这么多天内安装并首次使用 eSIM。
 - `networks` 按国家列出运营商及其最佳网络类型。
 - `order.url` 是购买该套餐的地址。
+- `quote_token` 和 `price_valid_until`：订单带上该令牌时，卖家在此之前保持这个价格（默认十分钟）。
+  下单时一并发送（第 4 步）。不带令牌时，订单按当时的价格付款。
 
 ## 3. 验证卖家签名（可选）
 
@@ -101,7 +105,7 @@ export function signedBySeller({ pubkey, capabilityId, productId, input, result,
 
 ## 4. 购买
 
-向 `<order.url>` 发送 `POST`，正文为 `{"offer_id": "<来自报价>"}`。第一次响应是 `402 Payment Required`，
+向 `<order.url>` 发送 `POST`，正文为 `{"offer_id": "<来自报价>", "quote_token": "<来自报价>"}`。第一次响应是 `402 Payment Required`，
 附 x402 v2 条款：方案 `exact`，网络 `eip155:8453`（Base），USDC，套餐价格，收款方为卖家。任何 x402 v2 客户端
 都能支付。你的钱包签署一份 EIP-3009 授权，不付 gas。使用 x402 包的 TypeScript 示例：
 
@@ -127,8 +131,10 @@ const payingFetch = wrapFetchWithPaymentFromConfig(keepPayment, {
   schemes: [{ network: "eip155:8453", client: new ExactEvmScheme(account) }],
 });
 
-export async function buyEsim(orderUrl, offerId) {
-  const body = JSON.stringify({ offer_id: offerId });
+export async function buyEsim(orderUrl, offer) {
+  // quote_token 在 offer.price_valid_until 之前保持报价。
+  const body = JSON.stringify({ offer_id: offer.offer_id, quote_token: offer.quote_token });
+  paidHeaders = null;
   let res = await payingFetch(orderUrl, { method: "POST", headers: { "content-type": "application/json" }, body });
   // 503 allocation_pending：eSIM 已下单但尚未就绪。稍后用同一笔付款重试。
   for (let i = 0; i < 6 && res.status === 503 && paidHeaders; i++) {
@@ -140,10 +146,17 @@ export async function buyEsim(orderUrl, offerId) {
     throw new Error(`402 ${terms ? JSON.parse(Buffer.from(terms, "base64").toString("utf8")).error : "payment required"}`);
   }
   const answer = await res.json();
-  if (!res.ok) throw new Error(`${res.status} ${answer.error}: ${answer.message}`);
+  // 带 current_offer 的 409 没有扣款：它是该套餐现在的样子，附带自己的 quote_token。
+  if (!res.ok) throw Object.assign(new Error(`${res.status} ${answer.error}: ${answer.message}`), { currentOffer: answer.current_offer });
   return answer.result;
 }
 ```
+
+**卖家保持的价格。** 报价有效期内，即使批发价此后上涨，402 要求的金额也不会超过报价；价格下降时则按更低的价格。
+卖家绝不低于自己的批发成本出售。如果价格上涨且报价已过期，或者成本已高于报价，在任何付款之前就会返回
+`409 quote_expired` 或 `409 quote_below_cost`，并附带 `current_offer`：该套餐现在的样子，带新的 `quote_token`。
+如果价格合适，调用 `buyEsim(orderUrl, err.currentOffer)`。当批发商拒绝卖家按旧目录定价的订单时也一样：卖家会立即
+重新读取目录，`409 supplier_<code>` 附带 `current_offer`。如果新成本允许，您的令牌在这里也保持原价。
 
 **何时扣款。** 卖家验证付款、购买 eSIM，并且只在 eSIM 创建后才结算付款。被拒绝的订单不花钱。仍在准备中的订单（`503 allocation_pending`）尚未扣款；再次发送同一笔付款会取回同一张 eSIM，绝不会买第二张。结算结果不确定时返回 `settlement_pending`：请勿再次付款，请联系卖家。
 
@@ -175,11 +188,14 @@ export async function buyEsim(orderUrl, offerId) {
 | 状态码 | `error` | 含义 | 怎么做 |
 |---|---|---|---|
 | 400 | `unknown_offer` | 该 `offer_id` 不在（或已不在）目录中。 | 重新报价。 |
+| 400 | `bad_quote_token` | 该 `quote_token` 不是这个卖家为这个 `offer_id` 签发的（被改动，或来自另一个套餐）。 | 按报价返回的原样发送，或不发送。 |
 | 402 | （x402 条款） | 需要付款，或付款被拒：金额不对、USDC 不足、已过期。 | 付款，或修复钱包。 |
 | 402 | `self_send_not_allowed` | 付款钱包就是卖家自己的地址：facilitator 拒绝付款给自己。 | 换一个钱包付款。 |
 | 402 | `invalid_exact_evm_insufficient_balance` | 付款钱包在 Base 上的 USDC 少于价格。 | 给钱包充值。 |
 | 403 | `demo_mode` | 演示节点，不出售任何东西。 | 换一个在售的卖家。 |
-| 409 | `supplier_<code>` | 批发商拒绝了订单：套餐下架、价格变动。没有扣款。 | 重新报价。 |
+| 409 | `quote_expired` | 报价已过期，且此后价格上涨。没有扣款。 | `current_offer` 是新的报价：用它的 `quote_token` 下单，或放弃。 |
+| 409 | `quote_below_cost` | 批发成本已高于报价；卖家不亏本出售。没有扣款。 | 同上：`current_offer`。 |
+| 409 | `supplier_<code>` | 批发商拒绝了订单：套餐下架、价格变动。没有扣款。卖家已重新读取目录。 | 有 `current_offer`（`catalogue_changed: true`）：下单。`offer_withdrawn: true`：换一个报价。`catalogue_changed: false`：稍后再试，或换一个卖家。 |
 | 503 | `allocation_pending` | 已下单，尚未就绪。尚未扣款。 | 在 `Retry-After` 秒后用同一笔付款重试（见上例）。 |
 | 503 | `catalogue_unavailable`、`payments_off` | 卖家暂时无法销售。 | 换个卖家，或稍后再试。 |
 | 500 | `internal_error` | 订单失败。没有扣款。 | 稍后再试，或换个卖家。 |

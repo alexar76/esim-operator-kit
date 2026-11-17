@@ -55,6 +55,19 @@ const envNumber = (env, name, fallback) => {
  * price list when PRICES_FILE names one. A list that is missing or does not read stops the start —
  * selling at prices the operator did not mean is worse than not starting.
  */
+/**
+ * How long a quoted price is kept, in milliseconds: QUOTE_TTL_SECONDS (default 600, ten minutes; 0 issues
+ * no quote tokens, so every order pays the current price). Anything else stops the start.
+ */
+export function quoteTtlFromEnv(env = process.env) {
+  const raw = String(env.QUOTE_TTL_SECONDS ?? "").trim();
+  if (raw === "") return 600_000;
+  if (!/^\d{1,5}$/.test(raw) || Number(raw) > 86_400) {
+    throw new Error(`QUOTE_TTL_SECONDS=${raw}: a whole number of seconds from 0 to 86400`);
+  }
+  return Number(raw) * 1000;
+}
+
 export function pricingFromEnv(env = process.env, { readFile = (f) => readFileSync(f, "utf8"), exists = existsSync } = {}) {
   const pricing = {
     marginPct: envNumber(env, "MARGIN_PCT", DEFAULT_PRICING.marginPct),

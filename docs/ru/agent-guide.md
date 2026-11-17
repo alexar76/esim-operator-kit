@@ -66,7 +66,9 @@ curl -s -X POST https://modelmarket.dev/providers/esim/quote \
         "top_up": true,
         "unused_valid_days": 180,
         "price": { "usd": "2.03", "currency": "USDC" },
-        "usd_per_gb": 0.68
+        "usd_per_gb": 0.68,
+        "quote_token": "q1.1791974564.203.mI2v0n9Qx…",
+        "price_valid_until": "2026-10-14T10:42:44.000Z"
       }
     ],
     "order": { "url": "https://modelmarket.dev/providers/esim/order", "method": "POST", "payment": "x402, USDC on Base" },
@@ -79,6 +81,8 @@ curl -s -X POST https://modelmarket.dev/providers/esim/quote \
 - `unused_valid_days`: eSIM нужно установить и впервые использовать в течение стольких дней после покупки.
 - `networks` перечисляет операторов по странам и лучший тип их сети.
 - `order.url` — где покупается это предложение.
+- `quote_token` и `price_valid_until`: продавец держит эту цену до этого времени для заказа, который передаёт токен
+  (по умолчанию десять минут). Отправьте его с заказом (шаг 4). Без него заказ платит цену на момент заказа.
 
 ## 3. Проверьте подпись продавца (необязательно)
 
@@ -105,7 +109,7 @@ export function signedBySeller({ pubkey, capabilityId, productId, input, result,
 
 ## 4. Купите
 
-`POST <order.url>` с `{"offer_id": "<из предложения>"}`. Первый ответ — `402 Payment Required` с
+`POST <order.url>` с `{"offer_id": "<из предложения>", "quote_token": "<из предложения>"}`. Первый ответ — `402 Payment Required` с
 условиями x402 v2: схема `exact`, сеть `eip155:8453` (Base), USDC, цена предложения, получатель —
 продавец. Заплатить может любой клиент x402 v2. Ваш кошелёк подписывает авторизацию EIP-3009 и не
 платит за газ. На TypeScript с пакетами x402:
@@ -132,8 +136,10 @@ const payingFetch = wrapFetchWithPaymentFromConfig(keepPayment, {
   schemes: [{ network: "eip155:8453", client: new ExactEvmScheme(account) }],
 });
 
-export async function buyEsim(orderUrl, offerId) {
-  const body = JSON.stringify({ offer_id: offerId });
+export async function buyEsim(orderUrl, offer) {
+  // quote_token держит цену из предложения до offer.price_valid_until.
+  const body = JSON.stringify({ offer_id: offer.offer_id, quote_token: offer.quote_token });
+  paidHeaders = null;
   let res = await payingFetch(orderUrl, { method: "POST", headers: { "content-type": "application/json" }, body });
   // 503 allocation_pending: eSIM заказана, но ещё не готова. Тот же платёж, чуть позже.
   for (let i = 0; i < 6 && res.status === 503 && paidHeaders; i++) {
@@ -145,10 +151,19 @@ export async function buyEsim(orderUrl, offerId) {
     throw new Error(`402 ${terms ? JSON.parse(Buffer.from(terms, "base64").toString("utf8")).error : "payment required"}`);
   }
   const answer = await res.json();
-  if (!res.ok) throw new Error(`${res.status} ${answer.error}: ${answer.message}`);
+  // 409 с current_offer ничего не списал: это предложение в нынешнем виде, со своим quote_token.
+  if (!res.ok) throw Object.assign(new Error(`${res.status} ${answer.error}: ${answer.message}`), { currentOffer: answer.current_offer });
   return answer.result;
 }
 ```
+
+**Цена, которую продавец держит.** Пока предложение действует, 402 просит не больше цены из предложения, даже
+если оптовая цена с тех пор выросла; если цена упала, просит меньше. Ниже своей оптовой цены продавец не продаёт
+никогда. Если цена выросла и срок предложения истёк, или опт стал дороже цены из предложения, ответ — `409
+quote_expired` или `409 quote_below_cost` до всякой оплаты, с `current_offer`: предложение в нынешнем виде, с новым
+`quote_token`. Если цена устраивает, вызовите `buyEsim(orderUrl, err.currentOffer)`. То же самое, когда оптовик
+отклоняет заказ, который продавец посчитал по старому каталогу: продавец сразу перечитывает каталог, и `409
+supplier_<code>` приходит с `current_offer`. Ваш токен и там держит свою цену, если новая оптовая цена это позволяет.
 
 **За что списываются деньги.** Продавец проверяет платёж, покупает eSIM и проводит платёж только после того, как eSIM создана. Отклонённый заказ ничего не стоит. Заказ, который ещё готовится (`503 allocation_pending`), пока не оплачен; тот же платёж, отправленный снова, забирает ту же eSIM и никогда вторую. При неопределённом результате возвращается `settlement_pending`: не платите повторно, обратитесь к продавцу.
 
@@ -181,11 +196,14 @@ QR и ссылку установки только путешественник�
 | Статус | `error` | Значение | Что делать |
 |---|---|---|---|
 | 400 | `unknown_offer` | Такого `offer_id` нет в каталоге (уже нет). | Запросите предложения снова. |
+| 400 | `bad_quote_token` | Этот `quote_token` продавец не выдавал для этого `offer_id` (изменён или от другого предложения). | Отправьте его как вернул ответ с предложениями или не отправляйте. |
 | 402 | (условия x402) | Нужна оплата, или платёж отклонён: не та сумма, не хватает USDC, истёк срок. | Заплатите или исправьте кошелёк. |
 | 402 | `self_send_not_allowed` | Кошелёк плательщика — это адрес самого продавца: фасилитатор не принимает оплату самому себе. | Платите с другого кошелька. |
 | 402 | `invalid_exact_evm_insufficient_balance` | На кошельке плательщика меньше USDC в Base, чем цена. | Пополните кошелёк. |
 | 403 | `demo_mode` | Демо-узел. Он ничего не продаёт. | Используйте продавца, который продаёт. |
-| 409 | `supplier_<code>` | Оптовик отклонил заказ: тариф снят, цена изменилась. Деньги не списаны. | Запросите предложения снова. |
+| 409 | `quote_expired` | Срок предложения истёк, и цена с тех пор выросла. Деньги не списаны. | `current_offer` — свежее предложение: закажите его по его `quote_token` или откажитесь. |
+| 409 | `quote_below_cost` | Оптовая цена выросла выше цены из предложения; в убыток продавец не продаёт. Деньги не списаны. | То же: `current_offer`. |
+| 409 | `supplier_<code>` | Оптовик отклонил заказ: тариф снят, цена изменилась. Деньги не списаны. Продавец уже перечитал каталог. | С `current_offer` (`catalogue_changed: true`): закажите его. `offer_withdrawn: true`: запросите другое предложение. `catalogue_changed: false`: позже или у другого продавца. |
 | 503 | `allocation_pending` | Заказано, ещё не готово. Пока не оплачено. | Тот же платёж через `Retry-After` секунд (пример выше). |
 | 503 | `catalogue_unavailable`, `payments_off` | Продавец сейчас не может продавать. | Другой продавец или позже. |
 | 500 | `internal_error` | Заказ не удался. Деньги не списаны. | Позже или другой продавец. |

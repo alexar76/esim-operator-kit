@@ -123,6 +123,16 @@
     "usd_per_gb": {
       "type": "number",
       "minimum": 0
+    },
+    "quote_token": {
+      "type": "string",
+      "pattern": "^q1\\.[0-9]{1,12}\\.[0-9]{1,9}\\.[A-Za-z0-9_-]{43}$",
+      "description": "send with offer_id to esim.order@v1: the order pays at most this price until price_valid_until (never below the seller's wholesale cost)"
+    },
+    "price_valid_until": {
+      "type": "string",
+      "format": "date-time",
+      "description": "until when the seller keeps this price for an order that brings quote_token"
     }
   }
 }

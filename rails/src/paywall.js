@@ -1,8 +1,8 @@
 // The x402 paywall in front of POST /order: the offer's own price, USDC on Base, paid to the seller,
 // through Coinbase's CDP facilitator. Same stack as the AIMarket gateway (okx-a2mcp/src/x402.js).
 //
-// The price is dynamic: it is read from the request's offer_id (src/node.js has already refused an
-// unknown one). The middleware verifies the payment, runs the order, settles only when the order
+// The price is dynamic: it is read from the request body, the offer_id and an optional quote_token
+// (src/node.js has already refused an unknown offer and decided the price a valid quote keeps). The middleware verifies the payment, runs the order, settles only when the order
 // answered below 400, and releases the buffered answer — the activation code — only after a
 // successful settlement. An uncertain outcome is recorded by onSettleFailure for reconciliation.
 import { createBaseReconciler } from "./reconcile.js";
@@ -27,13 +27,13 @@ export async function buildPaywall({ cdpKeyFile, payTo, publicUrl, priceOf, onSe
         network: BASE_MAINNET,
         payTo,
         price: (ctx) => {
-          const usd = priceOf(ctx.adapter.getBody?.()?.offer_id);
+          const usd = priceOf(ctx.adapter.getBody?.() ?? {});
           if (!usd) throw new Error("unknown offer");
           return `$${usd}`;
         },
       },
       resource: `${String(publicUrl).replace(/\/+$/, "")}/order`,
-      description: "One travel data eSIM, bought from this seller's wholesale account: send offer_id from esim.quote, pay the offer's price in USDC on Base, get the activation code (LPA), QR link, ICCID and a status token. Charged only when the profile is delivered.",
+      description: "One travel data eSIM, bought from this seller's wholesale account: send offer_id (and the quote_token) from esim.quote, pay the offer's price in USDC on Base (the quoted price while the quote is valid), get the activation code (LPA), QR link, ICCID and a status token. Charged only when the profile is delivered.",
       mimeType: "application/json",
       serviceName: "esim-rails",
       tags: ["esim", "travel", "mobile-data", "roaming"],

@@ -1,7 +1,9 @@
 #!/usr/bin/env node
 // An AI agent's side of an eSIM purchase, end to end, the way any agent outside the kit would do it:
 // find sellers through a hub (or ask one seller directly), skip the ones in demo mode, take the cheapest
-// offer, pay over x402 (a USDC authorization on Base, no gas), keep the same payment for a retry, bring the
+// offer, pay over x402 (a USDC authorization on Base, no gas) with the offer's quote_token so the quoted price
+// holds while it is valid, keep the same payment for a retry, take the fresh offer a 409 brings once (within
+// --max-usd) instead of giving up, bring the
 // seller's signed delivery receipt to the hub, and with --refund ask for the money back and bring that
 // receipt too.
 //
@@ -62,7 +64,8 @@ const real = quotes.filter((q) => !q.seller?.demo && q.offers?.length)
 if (!real.length) { console.error("\nno seller that sells has an offer for " + country); process.exit(1); }
 const { q, offer } = real[0];
 const maxUsd = Number(opt("max-usd", 1));
-console.log(`\noffer    ${offer.offer_id} — ${offer.name} — ${offer.price.usd} USDC, from ${q.seller.name}`);
+console.log(`\noffer    ${offer.offer_id} — ${offer.name} — ${offer.price.usd} USDC, from ${q.seller.name}`
+  + (offer.price_valid_until ? `; price kept until ${offer.price_valid_until}` : ""));
 console.log(`order at ${q.order.url}`);
 if (Number(offer.price.usd) > maxUsd) { console.error(`above --max-usd ${maxUsd}`); process.exit(1); }
 if (!flag("yes")) { console.log("\nquote only: add --yes to pay"); process.exit(0); }
@@ -71,8 +74,9 @@ if (!flag("yes")) { console.log("\nquote only: add --yes to pay"); process.exit(
 const output = opt("output", `esim-delivery-${Date.now()}.json`);
 const outputFd = openSync(output, "wx", 0o600);
 const recoveryToken = randomBytes(32).toString("base64url");
+let current = offer;   // the offer being bought: the quote's, or the fresh one a 409 brought
 const checkpoint = (data) => {
-  const text = JSON.stringify({ seller: q.order.url, offer_id: offer.offer_id, recovery_token: recoveryToken, ...data }, null, 2);
+  const text = JSON.stringify({ seller: q.order.url, offer_id: current.offer_id, recovery_token: recoveryToken, ...data }, null, 2);
   ftruncateSync(outputFd, 0);
   writeSync(outputFd, text, 0, "utf8");
   fsyncSync(outputFd);
@@ -97,12 +101,31 @@ const payingFetch = wrapFetchWithPaymentFromConfig(keepPayment, {
   schemes: [{ network: "eip155:8453", client: new ExactEvmScheme(account) }],
   spendControls: { maxAmountPerPayment: `$${maxUsd}` },
 });
-const body = JSON.stringify({ offer_id: offer.offer_id });
-let res = await payingFetch(q.order.url, { method: "POST", headers: { "content-type": "application/json", "X-Esim-Recovery": recoveryToken }, body });
-for (let i = 0; i < 6 && res.status === 503 && paidHeaders; i++) {
-  console.log("allocating… retrying with the same payment");
-  await new Promise((r) => setTimeout(r, 1000 * Number(res.headers.get("retry-after") || 20)));
-  res = await fetch(q.order.url, { method: "POST", headers: paidHeaders, body });
+// The quote_token keeps the quoted price until price_valid_until: the 402 asks at most that.
+async function order(o) {
+  paidHeaders = null;
+  const body = JSON.stringify({ offer_id: o.offer_id, ...(o.quote_token ? { quote_token: o.quote_token } : {}) });
+  let r = await payingFetch(q.order.url, { method: "POST", headers: { "content-type": "application/json", "X-Esim-Recovery": recoveryToken }, body });
+  for (let i = 0; i < 6 && r.status === 503 && paidHeaders; i++) {
+    console.log("allocating… retrying with the same payment");
+    await new Promise((ok) => setTimeout(ok, 1000 * Number(r.headers.get("retry-after") || 20)));
+    r = await fetch(q.order.url, { method: "POST", headers: paidHeaders, body });
+  }
+  return r;
+}
+let res = await order(current);
+// A 409 with current_offer: nothing was charged, and the seller says what the offer is now (a fresh
+// quote: the quote expired after a price rise, or the wholesale price moved). Take it once, within --max-usd.
+if (res.status === 409) {
+  const refused = await res.clone().json().catch(() => null);
+  const next = refused?.current_offer;
+  if (next?.offer_id === current.offer_id && refused.catalogue_changed !== false && Number(next.price.usd) <= maxUsd) {
+    console.log(`${refused.error}: not charged; the offer is now ${next.price.usd} USDC`
+      + (next.price_valid_until ? `, kept until ${next.price_valid_until}` : "") + " — ordering again");
+    current = next;
+    checkpoint({ status: "requoted", offer: next });
+    res = await order(current);
+  }
 }
 if (res.status === 402) {
   // A refused payment says why in the x402 header, not in the body.

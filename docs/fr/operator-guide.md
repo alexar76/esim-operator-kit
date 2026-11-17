@@ -101,6 +101,7 @@ nano .env
 | `STORE_TERMS_URL`, `STORE_PRIVACY_URL` | Vos CGV et votre politique de confidentialité. Liées en pied de page. |
 | `MARGIN_PCT` | Votre marge sur le prix de gros, en pourcentage. `100` le double. |
 | `MIN_MARGIN_USD` | La marge minimale par eSIM, en dollars. Les forfaits bon marché prennent au moins cela en plus. |
+| `QUOTE_TTL_SECONDS` | Combien de temps un prix annoncé est gardé, en secondes (`600`). Un agent qui commande avec le `quote_token` de l'offre paie au plus le prix annoncé jusque-là, jamais sous votre coût de gros ; ensuite, ou si le coût le dépasse, il reçoit l'offre telle qu'elle est maintenant avec un nouveau jeton. `0` : pas de jetons. |
 | `PRICES_FILE` | Facultatif : votre grille de prix par-dessus la formule, `/config/prices.csv`. Voir plus bas. |
 | `DEMO_MODE` | `1` affiche un bandeau et n'encaisse rien. `0` vend. Gardez `1` jusqu'à l'étape 10. |
 | `PAY_TO_EVM`, `PAY_TO_TON`, `PAY_TO_TRON`, `PAY_TO_SOLANA` | Vos adresses de réception. Une ligne vide désactive ce réseau. |

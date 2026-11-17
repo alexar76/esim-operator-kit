@@ -10,13 +10,25 @@
 // seller's wallet. The paywall settles only after the handler answered below 400, and only then
 // releases the buffered answer; a refused or still-allocating order is never charged, and an order
 // whose settlement is uncertain is held for reconciliation without another charge.
+//
+// A quote is a price the seller keeps for a while (quote.js): every offer carries a quote_token and
+// price_valid_until. An order that brings the token pays at most the quoted price while it is valid,
+// never below the wholesale cost; when the price rose and the quote expired, or the supplier refused
+// the order, the answer is the offer as it is now with a fresh token, not a bare error.
 import { createHash, createPrivateKey, createPublicKey, generateKeyPairSync, sign as edSign } from "node:crypto";
 import express from "express";
 import { SupplierError } from "./esimaccess.js";
-import { offersFromPlans, quote } from "./offers.js";
+import { offersFromPlans, publicOffer, quote } from "./offers.js";
+import { atPrice, centsOf, issueQuote, priceForQuote, quoteKey, readQuote, usdOf } from "./quote.js";
 import { asSupplier } from "./supplier.js";
 import { fulfil, status, transactionIdFor, refund, release } from "./order.js";
 import { usdcUnits } from "./refund.js";
+
+/** Why an order that brought a quote_token is not sold at either price (409, before any payment). */
+const QUOTE_REFUSALS = {
+  quote_expired: "the quote has expired and the price has gone up since; you were not charged. current_offer is a fresh quote: order again with its quote_token to pay its price",
+  quote_below_cost: "the wholesale cost has risen above the quoted price, so this seller cannot keep it; you were not charged. current_offer is a fresh quote: order again with its quote_token to pay its price",
+};
 
 export const CAPABILITIES = { quote: "esim.quote@v1", order: "esim.order@v1", status: "esim.status@v1" };
 
@@ -62,7 +74,7 @@ export function paymentRefOfHeader(header) {
  */
 export function createNode({
   supplier: configured, store, secret, signer, publicUrl, paywall = null, refunder = null, events = { emit() {} },
-  pricing = {}, productId = "esim-rails", sellerName = "eSIM seller", catalogTtlMs = 15 * 60_000,
+  pricing = {}, productId = "esim-rails", sellerName = "eSIM seller", catalogTtlMs = 15 * 60_000, quoteTtlMs = 10 * 60_000,
   now = () => Date.now(), orderWaitMs = 45_000, log = console, demo = false, reconciler = null,
 }) {
   if (!secret || String(secret).length < 16) throw new Error("the node needs a status secret of 16+ characters");
@@ -72,9 +84,12 @@ export function createNode({
   const origin = String(publicUrl || "").replace(/\/+$/, "");
   let catalog = { at: 0, offers: [], byId: new Map() };
   let loading = null;
+  const qkey = quoteKey(secret);
+  const iso = (ms) => new Date(ms).toISOString();
 
-  async function offers() {
-    if (now() - catalog.at < catalogTtlMs && catalog.offers.length) return catalog;
+  /** The catalogue, read again when older than catalogTtlMs, or now with `force` (after a refused order). */
+  async function offers({ force = false } = {}) {
+    if (!force && now() - catalog.at < catalogTtlMs && catalog.offers.length) return catalog;
     loading ??= (async () => {
       try {
         const list = offersFromPlans(await supplier.catalog(), pricing);
@@ -87,6 +102,72 @@ export function createNode({
       return catalog;
     })();
     return loading;
+  }
+
+  /** The offer as a quote would give it now: public fields, a fresh token and its validity. */
+  const freshOffer = (offer) => {
+    const pub = publicOffer(offer);
+    return quoteTtlMs > 0 ? { ...pub, ...issueQuote(qkey, pub, now() + quoteTtlMs) } : pub;
+  };
+
+  /**
+   * What an order for the catalogue's `offer` pays with `token` (absent, or from esim.quote):
+   * → {offer} to sell (at the honoured or current price, with the current wholesale cost), or
+   *   {error: "bad_quote_token" | "quote_expired" | "quote_below_cost"}.
+   */
+  function pricedOrder(offer, token) {
+    if (token === undefined || token === null || token === "") return { offer: { ...offer, _list_usd: offer.price.usd } };
+    const q = readQuote(qkey, token, offer.offer_id);
+    if (!q) return { error: "bad_quote_token" };
+    const p = priceForQuote(offer, q, now());
+    if (p.kind === "expired") return { error: "quote_expired" };
+    if (p.kind === "below_cost") return { error: "quote_below_cost" };
+    if (p.kind === "current") return { offer: { ...offer, _list_usd: offer.price.usd } };
+    return { offer: { ...atPrice(offer, p.cents), _quoted: true, _list_usd: offer.price.usd } };   // honoured
+  }
+
+  // The price the pre-paywall step decided for a request body, so the x402 terms and the order agree
+  // even if the catalogue is read again or the quote expires in between.
+  const decided = new WeakMap();
+  /** The price the paywall asks for an order body ({offer_id, quote_token?}) or a bare offer_id; null: not sold. */
+  function priceOf(bodyOrId) {
+    if (bodyOrId && typeof bodyOrId === "object" && decided.has(bodyOrId)) return decided.get(bodyOrId);
+    const body = bodyOrId && typeof bodyOrId === "object"
+      ? (bodyOrId.input && typeof bodyOrId.input === "object" ? bodyOrId.input : bodyOrId) : { offer_id: bodyOrId };
+    const offer = catalog.byId.get(String(body.offer_id ?? ""));
+    if (!offer) return null;
+    const priced = pricedOrder(offer, body.quote_token);
+    return priced.offer ? priced.offer.price.usd : null;
+  }
+
+  /**
+   * After the supplier said no to `refused` (the offer as it was sold): read the catalogue again and
+   * say what an order would get now. With the buyer's token still good for the new cost, the same
+   * token keeps its price; otherwise a fresh token at today's price.
+   */
+  async function afterRefusal(refused, token) {
+    const base = "the supplier refused this order; you were not charged";
+    const before = catalog;   // a successful read replaces the object; a failed one serves this one again
+    let cat;
+    try { cat = await offers({ force: true }); } catch { return { message: base, fields: {} }; }
+    if (cat === before) return { message: `${base}. The catalogue could not be read again; quote again later`, fields: {} };
+    const offer = cat.byId.get(refused.offer_id);
+    if (!offer) {
+      return { message: `${base}. This offer is no longer sold; quote again for another`,
+               fields: { offer_withdrawn: true, catalogue_at: iso(cat.at) } };
+    }
+    const changed = offer._cost_usd !== refused._cost_usd || offer.price.usd !== refused._list_usd;
+    const q = token ? readQuote(qkey, token, offer.offer_id) : null;
+    const p = q ? priceForQuote(offer, q, now()) : null;
+    const current_offer = p?.kind === "honoured"
+      ? { ...publicOffer(atPrice(offer, p.cents)), quote_token: token, price_valid_until: iso(q.untilMs) }
+      : freshOffer(offer);
+    return {
+      message: changed
+        ? `${base}. The wholesale catalogue has changed: current_offer is this offer now; order again with its quote_token`
+        : `${base}. The catalogue has not changed, so the refusal had another cause; try later or another seller`,
+      fields: { current_offer, catalogue_changed: changed, catalogue_at: iso(cat.at) },
+    };
   }
 
   const signed = (res, capabilityId, input, result) =>
@@ -169,6 +250,10 @@ export function createNode({
     try { cat = await offers(); } catch { return refuse(res, 503, "catalogue_unavailable", "the wholesale catalogue cannot be read right now"); }
     let list;
     try { list = quote(cat.offers, input); } catch (err) { return refuse(res, 400, "bad_input", err.message); }
+    if (quoteTtlMs > 0) {
+      const until = now() + quoteTtlMs;
+      list = list.map((o) => ({ ...o, ...issueQuote(qkey, o, until) }));
+    }
     return signed(res, req.body?.capability_id || CAPABILITIES.quote, input, {
       seller: { name: sellerName, product_id: productId, ...(demo ? { demo: true } : {}) },
       offers: list,
@@ -262,11 +347,18 @@ export function createNode({
     try { cat = await offers(); } catch { return refuse(res, 503, "catalogue_unavailable", "the wholesale catalogue cannot be read right now"); }
     const offer = cat.byId.get(id);
     if (!offer) return refuse(res, 400, "unknown_offer", "send offer_id from esim.quote");
+    const priced = pricedOrder(offer, inputOf(req).quote_token);
+    if (priced.error === "bad_quote_token") {
+      return refuse(res, 400, "bad_quote_token", "quote_token is not one this seller issued for this offer_id: send it as esim.quote returned it, or leave it out to pay the current price");
+    }
+    if (priced.error) return res.status(409).json({ success: false, error: priced.error, message: QUOTE_REFUSALS[priced.error],
+                                                     current_offer: freshOffer(offer), catalogue_at: iso(cat.at) });
     if (demo) return refuse(res, 403, "demo_mode", supplier.kind === "sample"
       ? "demo mode: this node quotes made-up sample prices and sells nothing; connect a wholesale account to sell"
       : "demo mode: this node quotes live prices and sells nothing; run your own node to sell");
     if (!paywall) return refuse(res, 503, "payments_off", "this node does not take payments yet");
-    req.offer = offer;
+    req.offer = priced.offer;
+    if (req.body && typeof req.body === "object") decided.set(req.body, priced.offer.price.usd);   // the paywall asks exactly this (priceOf)
     return next();
   });
   if (paywall) app.use((req, res, next) => req.paidReplay ? next() : paywall.middleware(req, res, next));
@@ -281,7 +373,7 @@ export function createNode({
           checkpoint = await settlementReader.prepare(payload.payload?.authorization, { to: paywall.payTo, value: usdcUnits(req.offer.price.usd) });
         } catch { return refuse(res, 503, "reconciliation_unavailable", "payment recovery is unavailable; nothing was charged, try later"); }
       }
-      const { _cost_usd: _c, ...offer } = req.offer;
+      const offer = publicOffer(req.offer);   // what the buyer sees and the record keeps: no wholesale cost
       const recovery = paywall?.tracksSettlement && !req.paidReplay ? {
         offer, paymentHash: req.paymentHash, recoveryHash: req.recoveryHash,
         settlement: { status: "procurement_pending", payTo: paywall.payTo, at: new Date(now()).toISOString(),
@@ -310,7 +402,11 @@ export function createNode({
       }
       if (err instanceof SupplierError) {
         // 2000xx: the plan, its price or the order was refused — the buyer is not charged.
-        return refuse(res, err.retryable ? 503 : 409, `supplier_${err.code}`, "the supplier refused this order; you were not charged");
+        if (err.retryable) return refuse(res, 503, `supplier_${err.code}`, "the supplier refused this order; you were not charged");
+        // A "no" can mean the catalogue the price came from is out of date: read it again now, not at the
+        // next refresh, and answer with the offer as an order would get it now.
+        const after = await afterRefusal(req.offer, inputOf(req).quote_token);
+        return res.status(409).json({ success: false, error: `supplier_${err.code}`, message: after.message, ...after.fields });
       }
       log.error?.(`order failed: ${err.message}`);
       return refuse(res, 500, "internal_error", "the order failed; you were not charged");
@@ -392,5 +488,5 @@ export function createNode({
   }
 
   app.use((_req, res) => refuse(res, 404, "not_found", "see /listing.json"));
-  return { app, offers, settleFailed, settled, reconcile, priceOf: (id) => catalog.byId.get(String(id))?.price.usd ?? null };
+  return { app, offers, settleFailed, settled, reconcile, priceOf };
 }

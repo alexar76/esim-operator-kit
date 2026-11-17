@@ -65,7 +65,9 @@ The answer (one offer, lists shortened):
         "top_up": true,
         "unused_valid_days": 180,
         "price": { "usd": "2.03", "currency": "USDC" },
-        "usd_per_gb": 0.68
+        "usd_per_gb": 0.68,
+        "quote_token": "q1.1791974564.203.mI2v0n9Qx…",
+        "price_valid_until": "2026-10-14T10:42:44.000Z"
       }
     ],
     "order": { "url": "https://modelmarket.dev/providers/esim/order", "method": "POST", "payment": "x402, USDC on Base" },
@@ -78,6 +80,8 @@ The answer (one offer, lists shortened):
 - `unused_valid_days`: the eSIM must be installed and first used within this many days of purchase.
 - `networks` lists the operators per country and their best network type.
 - `order.url` is where this offer is bought.
+- `quote_token` and `price_valid_until`: the seller keeps this price until then for an order that sends the
+  token (ten minutes by default). Send it with the order (step 4). Without it, an order pays the price of the moment.
 
 ## 3. Check the seller's signature (optional)
 
@@ -104,8 +108,8 @@ export function signedBySeller({ pubkey, capabilityId, productId, input, result,
 
 ## 4. Buy
 
-`POST <order.url>` with `{"offer_id": "<from the quote>"}`. The first answer is
-`402 Payment Required` with x402 v2 terms: scheme `exact`, network `eip155:8453` (Base), USDC, the
+`POST <order.url>` with `{"offer_id": "<from the quote>", "quote_token": "<from the quote>"}`. The first
+answer is `402 Payment Required` with x402 v2 terms: scheme `exact`, network `eip155:8453` (Base), USDC, the
 offer's price, paid to the seller. Any x402 v2 client pays it. Your wallet signs an EIP-3009
 authorization and pays no gas. In TypeScript with the x402 packages:
 
@@ -131,8 +135,10 @@ const payingFetch = wrapFetchWithPaymentFromConfig(keepPayment, {
   schemes: [{ network: "eip155:8453", client: new ExactEvmScheme(account) }],
 });
 
-export async function buyEsim(orderUrl, offerId) {
-  const body = JSON.stringify({ offer_id: offerId });
+export async function buyEsim(orderUrl, offer) {
+  // The quote_token keeps the quoted price until offer.price_valid_until.
+  const body = JSON.stringify({ offer_id: offer.offer_id, quote_token: offer.quote_token });
+  paidHeaders = null;
   let res = await payingFetch(orderUrl, { method: "POST", headers: { "content-type": "application/json" }, body });
   // 503 allocation_pending: the eSIM is ordered but not ready yet. Same payment, a little later.
   for (let i = 0; i < 6 && res.status === 503 && paidHeaders; i++) {
@@ -144,10 +150,20 @@ export async function buyEsim(orderUrl, offerId) {
     throw new Error(`402 ${terms ? JSON.parse(Buffer.from(terms, "base64").toString("utf8")).error : "payment required"}`);
   }
   const answer = await res.json();
-  if (!res.ok) throw new Error(`${res.status} ${answer.error}: ${answer.message}`);
+  // A 409 with current_offer charged nothing: it is the offer as it is now, with its own quote_token.
+  if (!res.ok) throw Object.assign(new Error(`${res.status} ${answer.error}: ${answer.message}`), { currentOffer: answer.current_offer });
   return answer.result;
 }
 ```
+
+**A price the seller keeps.** While the quote is valid, the 402 asks at most the quoted price, even if
+the wholesale price rose since; it asks less when the price fell. The seller never sells below its own
+wholesale cost. When the price rose and the quote expired, or the cost rose above the quoted price, the
+answer is `409 quote_expired` or `409 quote_below_cost` before any payment, with `current_offer`: the
+offer as it is now, with a fresh `quote_token`. If its price suits you, call `buyEsim(orderUrl, err.currentOffer)`.
+The same holds when the wholesaler refuses an order the seller priced from an older catalogue: the seller reads
+its catalogue again at once and the `409 supplier_<code>` carries `current_offer`. Your token keeps its price
+there too when the new cost allows it.
 
 **What you are charged for.** The seller verifies the payment, buys the eSIM, and settles the payment only after the eSIM exists. A refused order costs nothing. An order still being prepared (`503 allocation_pending`) is not charged yet; the same payment sent again collects the same eSIM, never a second one. An uncertain settlement returns `settlement_pending`: do not pay again; contact the seller.
 
@@ -180,11 +196,14 @@ a ticket or a calendar event. Keep `esim_tran_no` and `status_token` to check th
 | Status | `error` | Meaning | Do |
 |---|---|---|---|
 | 400 | `unknown_offer` | The `offer_id` is not in the catalogue (anymore). | Quote again. |
+| 400 | `bad_quote_token` | The `quote_token` is not one this seller issued for this `offer_id` (changed, or from another offer). | Send it as the quote returned it, or leave it out. |
 | 402 | (x402 terms) | Payment required, or the payment was refused: wrong amount, not enough USDC, expired. | Pay, or fix the wallet. |
 | 402 | `self_send_not_allowed` | The paying wallet is the seller's own address: the facilitator refuses a payment to oneself. | Pay from another wallet. |
 | 402 | `invalid_exact_evm_insufficient_balance` | The paying wallet holds less USDC on Base than the price. | Top the wallet up. |
 | 403 | `demo_mode` | A demo node. It sells nothing. | Use a seller that sells. |
-| 409 | `supplier_<code>` | The wholesaler refused the order: plan withdrawn, price changed. You were not charged. | Quote again. |
+| 409 | `quote_expired` | The quote expired and the price rose since. Nothing was charged. | `current_offer` is a fresh quote: order it with its `quote_token`, or not. |
+| 409 | `quote_below_cost` | The wholesale cost rose above the quoted price; the seller does not sell at a loss. Nothing was charged. | The same: `current_offer`. |
+| 409 | `supplier_<code>` | The wholesaler refused the order: plan withdrawn, price changed. You were not charged. The seller has read its catalogue again. | With `current_offer` (`catalogue_changed: true`): order it. `offer_withdrawn: true`: quote again for another. `catalogue_changed: false`: later, or another seller. |
 | 503 | `allocation_pending` | Ordered, not ready yet. Not charged yet. | Same payment after `Retry-After` seconds (example above). |
 | 503 | `catalogue_unavailable`, `payments_off` | The seller cannot sell right now. | Another seller, or later. |
 | 500 | `internal_error` | The order failed. You were not charged. | Later, or another seller. |

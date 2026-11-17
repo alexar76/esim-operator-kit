@@ -101,6 +101,7 @@ nano .env
 | `STORE_TERMS_URL`, `STORE_PRIVACY_URL` | Tus condiciones y tu política de privacidad. Se enlazan en el pie. |
 | `MARGIN_PCT` | Tu margen sobre el precio mayorista, en porcentaje. `100` lo duplica. |
 | `MIN_MARGIN_USD` | El margen mínimo por eSIM, en dólares. Los planes baratos llevan al menos esto encima. |
+| `QUOTE_TTL_SECONDS` | Cuánto tiempo se mantiene un precio consultado, en segundos (`600`). Un agente que pide con el `quote_token` de la oferta paga como mucho el precio consultado hasta entonces, nunca por debajo de tu coste mayorista; después, o si el coste lo supera, recibe la oferta tal como está ahora con un token nuevo. `0`: sin tokens. |
 | `PRICES_FILE` | Opcional: tu lista de precios sobre la fórmula, `/config/prices.csv`. Mira abajo. |
 | `DEMO_MODE` | `1` muestra un aviso y no cobra. `0` vende. Mantén `1` hasta el paso 10. |
 | `PAY_TO_EVM`, `PAY_TO_TON`, `PAY_TO_TRON`, `PAY_TO_SOLANA` | Tus direcciones de cobro. Una línea vacía desactiva esa red. |

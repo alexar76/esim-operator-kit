@@ -99,6 +99,7 @@ nano .env
 | `STORE_TERMS_URL`、`STORE_PRIVACY_URL` | 你的销售条款和隐私政策，链接显示在页脚。 |
 | `MARGIN_PCT` | 在批发价基础上的加价百分比。`100` 表示翻倍。 |
 | `MIN_MARGIN_USD` | 每张 eSIM 的最低利润（美元）。便宜的套餐至少加这么多。 |
+| `QUOTE_TTL_SECONDS` | 报价保持多久，单位秒（`600`）。代理带着套餐的 `quote_token` 下单时，在此之前最多支付报价，且绝不低于您的批发成本；过期后，或成本已高于报价时，会收到该套餐现在的样子和新的令牌。`0`：不发令牌。 |
 | `PRICES_FILE` | 可选：覆盖公式的价目表，`/config/prices.csv`。见下文。 |
 | `DEMO_MODE` | `1` 显示横幅且不收款。`0` 正式销售。在第 10 步之前保持 `1`。 |
 | `PAY_TO_EVM`、`PAY_TO_TON`、`PAY_TO_TRON`、`PAY_TO_SOLANA` | 你的收款地址。留空即关闭该网络。 |

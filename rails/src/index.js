@@ -12,7 +12,8 @@ export { createClient as createEsimAccessClient, keysFromFiles, PRICE_UNITS } fr
 export { httpSupplier, signSupplierRequest, verifySupplierRequest } from "./http-supplier.js";
 export { airaloSupplier, esimGoSupplier } from "./suppliers-more.js";
 export { sampleSupplier, samplePlans } from "./sample-supplier.js";
-export { supplierFromEnv, webhooksFromEnv, pricingFromEnv } from "./config.js";
+export { supplierFromEnv, webhooksFromEnv, pricingFromEnv, quoteTtlFromEnv } from "./config.js";
+export { issueQuote, readQuote, priceForQuote, quoteKey, QUOTE_TOKEN_PATTERN } from "./quote.js";
 export { createWebhooks, signWebhook, verifyWebhook } from "./webhooks.js";
 export { offersFromPlans, offersFromEsimAccess, planShape, priceCents, priceFor, DEFAULT_PRICING, quote, publicOffer } from "./offers.js";
 export { parsePriceList, parseCsv, compileRules, ruleFor, PriceListError } from "./prices.js";

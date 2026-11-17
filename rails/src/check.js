@@ -42,8 +42,10 @@ export async function checkSeller(base, { country = "FR", fetchImpl = globalThis
   // 2. A quote: schema, order of offers, signature.
   const input = { country, min_gb: 1, limit: 5 };
   let offers = [];
+  let sellerNow = NaN;   // the seller's clock (its Date header): the checker's own may be off
   try {
     const { res, json } = await call("/quote", input);
+    sellerNow = Date.parse(res.headers.get("date") || "");
     const problems = json?.success === true ? validate("quote-result", json.result) : ["$.success: not true"];
     offers = json?.result?.offers || [];
     if (!res.ok || problems.length) fail("esim.quote@v1 answer", problems.slice(0, 5).join("; ") || `HTTP ${res.status}`);
@@ -79,9 +81,24 @@ export async function checkSeller(base, { country = "FR", fetchImpl = globalThis
       if (res.status === 400 && json?.error === "unknown_offer") ok("unknown offer is a 400 before any price");
       else fail("unknown offer is a 400 before any price", `HTTP ${res.status}`);
     } catch (err) { fail("unknown offer is a 400 before any price", err.message); }
+    // A kept price: offers that carry a quote_token say until when, the order takes the token back,
+    // and a token that was tampered with is refused before any price (or a demo node's refusal).
+    if (offers[0]?.quote_token) {
+      const until = Date.parse(offers[0].price_valid_until || "");
+      const at = Number.isFinite(sellerNow) ? sellerNow : Date.now();
+      // The Date header has whole seconds and price_valid_until is rounded down to a second.
+      if (!(until >= at)) fail("quoted price kept", `price_valid_until ${offers[0].price_valid_until || "missing"} is not after the seller's own time ${new Date(at).toISOString()}`);
+      else ok("quoted price kept", `${Math.round((until - at) / 60_000)} min, until ${offers[0].price_valid_until}, for an order that brings quote_token`);
+      try {
+        const forged = offers[0].quote_token.replace(/\.(\d+)\./, (_m, c) => `.${Math.max(0, Number(c) - 100)}.`);
+        const { res, json } = await call(orderUrl, { offer_id: offers[0].offer_id, quote_token: forged });
+        if (res.status === 400 && json?.error === "bad_quote_token") ok("a changed quote_token is a 400 before any price");
+        else fail("a changed quote_token is a 400 before any price", `HTTP ${res.status} ${json?.error || ""}`.trim());
+      } catch (err) { fail("a changed quote_token is a 400 before any price", err.message); }
+    } else if (offers[0]) warn("quoted price kept", "offers carry no quote_token: an order pays the price of the moment (QUOTE_TTL_SECONDS=0, or a kit without kept prices)");
     if (offers[0]) {
       try {
-        const { res, json } = await call(orderUrl, { offer_id: offers[0].offer_id });
+        const { res, json } = await call(orderUrl, { offer_id: offers[0].offer_id, ...(offers[0].quote_token ? { quote_token: offers[0].quote_token } : {}) });
         if (res.status === 403 && json?.error === "demo_mode") warn("x402 terms", "a demo node: it sells nothing (demo_mode)");
         else if (res.status !== 402) fail("x402 terms", `expected 402, got HTTP ${res.status}`);
         else {

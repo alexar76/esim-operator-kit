@@ -2,6 +2,24 @@
 
 ## Unreleased
 
+- **A quoted price is kept, and a changed one comes back as a fresh quote, not a dead end.** Asked on DEV
+  (2026-11-17) what the kit does when an offer goes stale between the quote and the payment.
+  - Every offer in `esim.quote@v1` carries `quote_token` and `price_valid_until` (`QUOTE_TTL_SECONDS`, default
+    600; `0` issues none). The token is an HMAC over the offer, the price and the end of validity, under a key
+    derived from the status secret: no quote is stored, and a changed token is a `400 bad_quote_token`.
+  - An order that sends the token pays at most the quoted price while it is valid, even if the wholesale price
+    rose since, and never below the current wholesale cost. A lower price is always paid as it is now.
+  - When the price rose and the quote expired, or the cost rose above the quoted price, the order is refused
+    before any payment with `409 quote_expired` or `409 quote_below_cost` and `current_offer`: the offer as it
+    is now, with a fresh token.
+  - When the wholesaler refuses an order (`409 supplier_<code>`), the node reads its catalogue again at once
+    (until now the old one answered for up to 15 minutes, so a new quote could be refused again) and answers
+    with `current_offer` (the buyer's token keeps its price when the new cost allows it), `offer_withdrawn`, or
+    `catalogue_changed: false`.
+  - The x402 terms ask exactly the price decided for the request. Refunds pay back the price paid.
+  - `examples/agent-buy.mjs` sends the token and takes the fresh offer once within `--max-usd`; `esim-rails
+    check` checks the validity and that a changed token is refused. Offer schema: two optional fields. Tests:
+    `test/quote.test.js`, and `test/agent-buy.test.js` runs the example with its x402 client against a node.
 - **Try the kit before a server exists.** `./onboard.sh --try` runs the storefront and the seller node
   on your own computer (`docker-compose.try.yml`): http://localhost:9495 and http://localhost:9490, a
   made-up catalogue (`SUPPLIER=sample`, 49 plans with ids `SAMPLE-…` and invented costs), demo mode, no

@@ -66,7 +66,9 @@ La réponse (une offre, listes raccourcies) :
         "top_up": true,
         "unused_valid_days": 180,
         "price": { "usd": "2.03", "currency": "USDC" },
-        "usd_per_gb": 0.68
+        "usd_per_gb": 0.68,
+        "quote_token": "q1.1791974564.203.mI2v0n9Qx…",
+        "price_valid_until": "2026-10-14T10:42:44.000Z"
       }
     ],
     "order": { "url": "https://modelmarket.dev/providers/esim/order", "method": "POST", "payment": "x402, USDC on Base" },
@@ -79,6 +81,8 @@ La réponse (une offre, listes raccourcies) :
 - `unused_valid_days` : l'eSIM doit être installée et utilisée une première fois dans ce nombre de jours après l'achat.
 - `networks` liste les opérateurs par pays et leur meilleur type de réseau.
 - `order.url` est l'adresse où s'achète cette offre.
+- `quote_token` et `price_valid_until` : le vendeur garde ce prix jusque-là pour une commande qui envoie le jeton
+  (dix minutes par défaut). Envoyez-le avec la commande (étape 4). Sans lui, la commande paie le prix du moment.
 
 ## 3. Vérifiez la signature du vendeur (facultatif)
 
@@ -105,7 +109,7 @@ export function signedBySeller({ pubkey, capabilityId, productId, input, result,
 
 ## 4. Achetez
 
-`POST <order.url>` avec `{"offer_id": "<issu de la demande>"}`. La première réponse est
+`POST <order.url>` avec `{"offer_id": "<issu de la demande>", "quote_token": "<issu de la demande>"}`. La première réponse est
 `402 Payment Required` avec les conditions x402 v2 : schéma `exact`, réseau `eip155:8453` (Base),
 USDC, le prix de l'offre, payé au vendeur. N'importe quel client x402 v2 le paie. Votre portefeuille
 signe une autorisation EIP-3009 et ne paie pas de gas. En TypeScript avec les paquets x402 :
@@ -132,8 +136,10 @@ const payingFetch = wrapFetchWithPaymentFromConfig(keepPayment, {
   schemes: [{ network: "eip155:8453", client: new ExactEvmScheme(account) }],
 });
 
-export async function buyEsim(orderUrl, offerId) {
-  const body = JSON.stringify({ offer_id: offerId });
+export async function buyEsim(orderUrl, offer) {
+  // Le quote_token garde le prix annoncé jusqu'à offer.price_valid_until.
+  const body = JSON.stringify({ offer_id: offer.offer_id, quote_token: offer.quote_token });
+  paidHeaders = null;
   let res = await payingFetch(orderUrl, { method: "POST", headers: { "content-type": "application/json" }, body });
   // 503 allocation_pending : l'eSIM est commandée mais pas encore prête. Même paiement, un peu plus tard.
   for (let i = 0; i < 6 && res.status === 503 && paidHeaders; i++) {
@@ -145,10 +151,20 @@ export async function buyEsim(orderUrl, offerId) {
     throw new Error(`402 ${terms ? JSON.parse(Buffer.from(terms, "base64").toString("utf8")).error : "payment required"}`);
   }
   const answer = await res.json();
-  if (!res.ok) throw new Error(`${res.status} ${answer.error}: ${answer.message}`);
+  // Un 409 avec current_offer n'a rien facturé : c'est l'offre telle qu'elle est maintenant, avec son propre quote_token.
+  if (!res.ok) throw Object.assign(new Error(`${res.status} ${answer.error}: ${answer.message}`), { currentOffer: answer.current_offer });
   return answer.result;
 }
 ```
+
+**Un prix que le vendeur garde.** Tant que l'offre est valable, le 402 demande au plus le prix annoncé, même si
+le prix de gros a monté depuis ; il demande moins si le prix a baissé. Le vendeur ne vend jamais sous son propre
+coût de gros. Si le prix a monté et que l'offre a expiré, ou si le coût dépasse le prix annoncé, la réponse est
+`409 quote_expired` ou `409 quote_below_cost` avant tout paiement, avec `current_offer` : l'offre telle qu'elle est
+maintenant, avec un nouveau `quote_token`. Si son prix vous convient, appelez `buyEsim(orderUrl, err.currentOffer)`.
+Il en va de même quand le grossiste refuse une commande que le vendeur a chiffrée sur un catalogue plus ancien : le
+vendeur relit aussitôt son catalogue et le `409 supplier_<code>` porte `current_offer`. Votre jeton y garde aussi
+son prix quand le nouveau coût le permet.
 
 **Ce qui est facturé.** Le vendeur vérifie le paiement, achète l'eSIM et ne règle le paiement qu'une fois l'eSIM créée. Une commande refusée ne coûte rien. Une commande encore en préparation (`503 allocation_pending`) n'est pas encore facturée ; le même paiement renvoyé récupère la même eSIM, jamais une seconde. Un règlement incertain renvoie `settlement_pending` : ne payez pas à nouveau ; contactez le vendeur.
 
@@ -182,11 +198,14 @@ pour consulter l'eSIM plus tard.
 | Statut | `error` | Signification | Que faire |
 |---|---|---|---|
 | 400 | `unknown_offer` | L'`offer_id` n'est pas (plus) au catalogue. | Redemandez des offres. |
+| 400 | `bad_quote_token` | Le `quote_token` n'a pas été émis par ce vendeur pour cet `offer_id` (modifié, ou d'une autre offre). | Renvoyez-le tel que la demande l'a rendu, ou omettez-le. |
 | 402 | (conditions x402) | Paiement requis, ou paiement refusé : mauvais montant, USDC insuffisant, expiré. | Payez, ou corrigez le portefeuille. |
 | 402 | `self_send_not_allowed` | Le portefeuille payeur est l'adresse du vendeur lui-même : le facilitateur refuse un paiement à soi-même. | Payez depuis un autre portefeuille. |
 | 402 | `invalid_exact_evm_insufficient_balance` | Le portefeuille payeur détient moins d'USDC sur Base que le prix. | Approvisionnez le portefeuille. |
 | 403 | `demo_mode` | Un nœud de démonstration. Il ne vend rien. | Utilisez un vendeur qui vend. |
-| 409 | `supplier_<code>` | Le grossiste a refusé la commande : forfait retiré, prix changé. Rien n'a été facturé. | Redemandez des offres. |
+| 409 | `quote_expired` | L'offre a expiré et le prix a monté depuis. Rien n'a été facturé. | `current_offer` est une offre fraîche : commandez-la avec son `quote_token`, ou non. |
+| 409 | `quote_below_cost` | Le coût de gros dépasse le prix annoncé ; le vendeur ne vend pas à perte. Rien n'a été facturé. | Idem : `current_offer`. |
+| 409 | `supplier_<code>` | Le grossiste a refusé la commande : forfait retiré, prix changé. Rien n'a été facturé. Le vendeur a relu son catalogue. | Avec `current_offer` (`catalogue_changed: true`) : commandez-la. `offer_withdrawn: true` : demandez une autre offre. `catalogue_changed: false` : plus tard, ou un autre vendeur. |
 | 503 | `allocation_pending` | Commandée, pas encore prête. Pas encore facturée. | Même paiement après `Retry-After` secondes (exemple ci-dessus). |
 | 503 | `catalogue_unavailable`, `payments_off` | Le vendeur ne peut pas vendre pour l'instant. | Un autre vendeur, ou plus tard. |
 | 500 | `internal_error` | La commande a échoué. Rien n'a été facturé. | Plus tard, ou un autre vendeur. |

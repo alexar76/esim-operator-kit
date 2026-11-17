@@ -14,11 +14,12 @@
 //                             through the facilitator, no gas (refund.js); REFUND_MAX_USD, REFUND_DAILY_MAX_USD
 //                             cap them (50 each). Without it a refund is recorded as due for you to pay.
 //   MARGIN_PCT, MIN_MARGIN_USD, PRICES_FILE (your price list), SELLER_NAME, PRODUCT_ID, HOST, PORT
+//   QUOTE_TTL_SECONDS         how long a quoted price is kept for an order that brings its quote_token (600; 0: never)
 //   DEMO_MODE=1               quotes and status answer, /order says "demo mode" and sells nothing
 import { generateKeyPairSync, randomBytes } from "node:crypto";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import * as fsp from "node:fs/promises";
-import { pricingFromEnv, supplierFromEnv, webhooksFromEnv } from "./config.js";
+import { pricingFromEnv, quoteTtlFromEnv, supplierFromEnv, webhooksFromEnv } from "./config.js";
 import { createNode, ed25519Signer } from "./node.js";
 import { createBaseReconciler, startReconciliation } from "./reconcile.js";
 import { fileStore } from "./order.js";
@@ -47,7 +48,7 @@ const reconciler = createBaseReconciler({ rpcUrl: env.BASE_RPC || undefined });
 let node = null;
 const paywall = demo ? null : await buildPaywall({
   cdpKeyFile: env.CDP_KEY_FILE, payTo: env.PAY_TO, publicUrl, reconciler,
-  priceOf: (id) => node?.priceOf(id), onSettleFailure: (p) => node.settleFailed(p), onSettled: (p, r) => node.settled(p, r),
+  priceOf: (body) => node?.priceOf(body), onSettleFailure: (p) => node.settleFailed(p), onSettled: (p, r) => node.settled(p, r),
 }).catch((err) => { console.error(`payments off: ${err.message}`); return null; });
 const refunder = demo || !env.REFUND_KEY_FILE ? null : await buildRefunder({
   budgetStore: store, keyFile: env.REFUND_KEY_FILE, cdpKeyFile: env.CDP_KEY_FILE, publicUrl,
@@ -55,7 +56,7 @@ const refunder = demo || !env.REFUND_KEY_FILE ? null : await buildRefunder({
 }).catch((err) => { console.error(`automatic refunds off: ${err.message}`); return null; });
 node = createNode({
   supplier, store, reconciler, secret: statusSecret, signer: ed25519Signer(providerPem), publicUrl, paywall, refunder, events,
-  pricing,
+  pricing, quoteTtlMs: quoteTtlFromEnv(env),
   sellerName: env.SELLER_NAME || "eSIM seller", productId: env.PRODUCT_ID || "esim-rails", demo,
 });
 await node.offers().catch((err) => console.error(`catalogue not loaded yet: ${err.code || err.message}`));

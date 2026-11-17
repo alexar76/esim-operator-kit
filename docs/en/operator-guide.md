@@ -101,6 +101,7 @@ nano .env
 | `STORE_TERMS_URL`, `STORE_PRIVACY_URL` | Your terms and privacy policy. They are linked in the footer. |
 | `MARGIN_PCT` | Your markup on the wholesale price, in percent. `100` doubles it. |
 | `MIN_MARGIN_USD` | The smallest margin per eSIM, in dollars. Cheap plans get at least this much on top. |
+| `QUOTE_TTL_SECONDS` | How long a quoted price is kept, in seconds (`600`). An agent that orders with the offer's `quote_token` pays at most the quoted price until then, never below your wholesale cost; after that, or when the cost has risen above it, it gets the offer as it is now with a fresh token. `0`: no tokens. |
 | `PRICES_FILE` | Optional: your own price list over the formula, `/config/prices.csv`. See below. |
 | `DEMO_MODE` | `1` shows a banner and takes no payment. `0` sells. Keep `1` until step 10. |
 | `PAY_TO_EVM`, `PAY_TO_TON`, `PAY_TO_TRON`, `PAY_TO_SOLANA` | Your receiving addresses. Leave a line empty to turn that network off. |
