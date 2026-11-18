@@ -165,6 +165,14 @@ The same holds when the wholesaler refuses an order the seller priced from an ol
 its catalogue again at once and the `409 supplier_<code>` carries `current_offer`. Your token keeps its price
 there too when the new cost allows it.
 
+**A refused order and the other sellers.** A refusal that brings `current_offer` replaces that seller's quote; it
+does not end the purchase. If you quoted several sellers, compare again before you order: another seller's quote
+keeps its price while it is valid, so it may now be the cheaper one, and comparing needs no new quotes. Order the
+cheapest offer you now know: the same seller at its new price, or the other seller with its own `quote_token`. Sign
+no more than the offer you chose: a seller that issues no quote tokens may ask more at the order than it quoted.
+`examples/agent-buy.mjs` does this (at most four orders in all) and gives each seller its own `X-Esim-Recovery`
+value.
+
 **What you are charged for.** The seller verifies the payment, buys the eSIM, and settles the payment only after the eSIM exists. A refused order costs nothing. An order still being prepared (`503 allocation_pending`) is not charged yet; the same payment sent again collects the same eSIM, never a second one. An uncertain settlement returns `settlement_pending`: do not pay again; contact the seller.
 
 The answer:
@@ -243,7 +251,7 @@ node examples/agent-buy.mjs https://<seller>/agents TR --key-file ~/agent-wallet
 | `--hub <url>` | Finds sellers through this hub and skips the ones in demo mode. |
 | `--key-file <file>` | The agent's wallet, `{"private_key": "0x…"}`. Never printed. `AGENT_PRIVATE_KEY` works too. |
 | `--min-gb`, `--days` | The trip's needs. |
-| `--max-usd` | The most one payment may cost, 1 by default. The x402 client refuses to sign more. |
+| `--max-usd` | The most one payment may cost, 1 by default. The x402 client refuses to sign more, or more than the offer being bought. |
 | `--refund` | Asks for the money back right after the delivery: for a test. |
 | `--no-share` | Keeps the purchase from the hub: no receipt goes to it. |
 

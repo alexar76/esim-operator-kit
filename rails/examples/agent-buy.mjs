@@ -2,10 +2,11 @@
 // An AI agent's side of an eSIM purchase, end to end, the way any agent outside the kit would do it:
 // find sellers through a hub (or ask one seller directly), skip the ones in demo mode, take the cheapest
 // offer, pay over x402 (a USDC authorization on Base, no gas) with the offer's quote_token so the quoted price
-// holds while it is valid, keep the same payment for a retry, take the fresh offer a 409 brings once (within
-// --max-usd) instead of giving up, bring the
-// seller's signed delivery receipt to the hub, and with --refund ask for the money back and bring that
-// receipt too.
+// holds while it is valid, and keep the same payment for a retry. A refused order (409, nothing charged) does
+// not end the purchase: the fresh offer it brings replaces that seller's quote, and the agent orders the
+// cheapest offer it now knows, within --max-usd: the same seller at its new price, or another seller whose
+// quote still holds. Then it brings the seller's signed delivery receipt to the hub, and with --refund asks
+// for the money back and brings that receipt too.
 //
 //   node examples/agent-buy.mjs TR --hub https://modelmarket.dev --key-file ~/wallet.json [--yes] [--refund]
 //   node examples/agent-buy.mjs https://<seller>/agents TR --key-file ~/wallet.json [--yes]      (one seller)
@@ -59,24 +60,33 @@ for (const q of quotes) {
   console.log(`seller   ${q.seller?.name} (${q.via})${q.seller?.demo ? " — DEMO: sells nothing" : ""}`
     + `${q.deliveries_30d ? ` — buyers confirmed ${q.deliveries_30d.confirmed} deliveries in 30 days` : ""}`);
 }
-const real = quotes.filter((q) => !q.seller?.demo && q.offers?.length)
-  .map((q) => ({ q, offer: q.offers[0] })).sort((a, b) => Number(a.offer.price.usd) - Number(b.offer.price.usd));
-if (!real.length) { console.error("\nno seller that sells has an offer for " + country); process.exit(1); }
-const { q, offer } = real[0];
+// Each seller that sells, with its cheapest offer that fits: what the agent compares, cheapest first.
 const maxUsd = Number(opt("max-usd", 1));
-console.log(`\noffer    ${offer.offer_id} — ${offer.name} — ${offer.price.usd} USDC, from ${q.seller.name}`
-  + (offer.price_valid_until ? `; price kept until ${offer.price_valid_until}` : ""));
-console.log(`order at ${q.order.url}`);
-if (Number(offer.price.usd) > maxUsd) { console.error(`above --max-usd ${maxUsd}`); process.exit(1); }
+const usd = (c) => Number(c.offer.price.usd);
+const known = quotes.filter((q) => !q.seller?.demo && q.offers?.length).map((q) => ({ q, offer: q.offers[0] }));
+const byPrice = (a, b) => usd(a) - usd(b) || Number(Boolean(b.fresh)) - Number(Boolean(a.fresh));   // a tie: the fresher offer
+const cheapest = () => known.filter((c) => usd(c) <= maxUsd).sort(byPrice)[0];
+if (!known.length) { console.error("\nno seller that sells has an offer for " + country); process.exit(1); }
+let current = cheapest();   // { q: the seller's quote, offer }: what is being bought
+const first = current ?? [...known].sort(byPrice)[0];
+console.log(`\noffer    ${first.offer.offer_id} — ${first.offer.name} — ${first.offer.price.usd} USDC, from ${first.q.seller.name}`
+  + (first.offer.price_valid_until ? `; price kept until ${first.offer.price_valid_until}` : ""));
+console.log(`order at ${first.q.order.url}`);
+if (!current) { console.error(`above --max-usd ${maxUsd}`); process.exit(1); }
 if (!flag("yes")) { console.log("\nquote only: add --yes to pay"); process.exit(0); }
 
 // Reserve a new private output file BEFORE paying. Never overwrite an earlier delivery or follow a symlink.
 const output = opt("output", `esim-delivery-${Date.now()}.json`);
 const outputFd = openSync(output, "wx", 0o600);
-const recoveryToken = randomBytes(32).toString("base64url");
-let current = offer;   // the offer being bought: the quote's, or the fresh one a 409 brought
+// One private recovery value per seller: a seller never learns the value that recovers another seller's order.
+const recovery = new Map();
+const recoveryFor = (url) => {
+  if (!recovery.has(url)) recovery.set(url, randomBytes(32).toString("base64url"));
+  return recovery.get(url);
+};
 const checkpoint = (data) => {
-  const text = JSON.stringify({ seller: q.order.url, offer_id: current.offer_id, recovery_token: recoveryToken, ...data }, null, 2);
+  const url = current.q.order.url;
+  const text = JSON.stringify({ seller: url, offer_id: current.offer.offer_id, recovery_token: recoveryFor(url), ...data }, null, 2);
   ftruncateSync(outputFd, 0);
   writeSync(outputFd, text, 0, "utf8");
   fsyncSync(outputFd);
@@ -89,6 +99,7 @@ if (!/^0x[0-9a-fA-F]{64}$/.test(key)) { console.error("the key file (or AGENT_PR
 const account = privateKeyToAccount(key);
 console.log(`payer    ${account.address}`);
 let paidHeaders = null;   // the same payment for a retry: a new one would be a second order
+let askedMore = null;     // a price a seller asked above the offer being bought: then nothing is signed
 const keepPayment = (input, init) => {
   const req = new Request(input, init);
   if (req.headers.has("PAYMENT-SIGNATURE")) {
@@ -99,34 +110,67 @@ const keepPayment = (input, init) => {
 };
 const payingFetch = wrapFetchWithPaymentFromConfig(keepPayment, {
   schemes: [{ network: "eip155:8453", client: new ExactEvmScheme(account) }],
+  // Sign no more than the offer being bought (the price the agent compared), and never above --max-usd.
+  paymentRequirementsSelector: (_version, accepts) => {
+    const terms = accepts.find((a) => a.network === "eip155:8453") ?? accepts[0];
+    if (terms && BigInt(terms.amount) > BigInt(Math.round(usd(current) * 1e6))) {
+      askedMore = (Number(terms.amount) / 1e6).toFixed(2);
+      throw new Error(`the seller asks ${askedMore} USDC, more than its offer`);
+    }
+    return terms;
+  },
   spendControls: { maxAmountPerPayment: `$${maxUsd}` },
 });
 // The quote_token keeps the quoted price until price_valid_until: the 402 asks at most that.
-async function order(o) {
+// null: the seller asked more than the offer, and nothing was signed.
+async function order(c) {
   paidHeaders = null;
-  const body = JSON.stringify({ offer_id: o.offer_id, ...(o.quote_token ? { quote_token: o.quote_token } : {}) });
-  let r = await payingFetch(q.order.url, { method: "POST", headers: { "content-type": "application/json", "X-Esim-Recovery": recoveryToken }, body });
+  askedMore = null;
+  const url = c.q.order.url;
+  const body = JSON.stringify({ offer_id: c.offer.offer_id, ...(c.offer.quote_token ? { quote_token: c.offer.quote_token } : {}) });
+  let r;
+  try {
+    r = await payingFetch(url, { method: "POST", headers: { "content-type": "application/json", "X-Esim-Recovery": recoveryFor(url) }, body });
+  } catch (err) {
+    if (askedMore !== null) return null;
+    throw err;
+  }
   for (let i = 0; i < 6 && r.status === 503 && paidHeaders; i++) {
     console.log("allocating… retrying with the same payment");
     await new Promise((ok) => setTimeout(ok, 1000 * Number(r.headers.get("retry-after") || 20)));
-    r = await fetch(q.order.url, { method: "POST", headers: paidHeaders, body });
+    r = await fetch(url, { method: "POST", headers: paidHeaders, body });
   }
   return r;
 }
+// A refused order charged nothing: a 409 that says so (the quote expired after a price rise, the wholesale cost
+// passed the quoted price, or the wholesaler said no), or terms above the offer, which the agent did not sign.
+// What the seller offers now (current_offer, with a fresh token) replaces its quote; a seller that can only say
+// no is dropped. Then the agent orders the cheapest offer it now knows, within --max-usd: the same seller at its
+// new price, or another seller whose quote still holds its price. That needs no new quotes.
+const NOT_CHARGED = /^(quote_expired|quote_below_cost|supplier_\w+)$/;
+const MAX_ORDERS = 4;
 let res = await order(current);
-// A 409 with current_offer: nothing was charged, and the seller says what the offer is now (a fresh
-// quote: the quote expired after a price rise, or the wholesale price moved). Take it once, within --max-usd.
-if (res.status === 409) {
-  const refused = await res.clone().json().catch(() => null);
-  const next = refused?.current_offer;
-  if (next?.offer_id === current.offer_id && refused.catalogue_changed !== false && Number(next.price.usd) <= maxUsd) {
-    console.log(`${refused.error}: not charged; the offer is now ${next.price.usd} USDC`
-      + (next.price_valid_until ? `, kept until ${next.price_valid_until}` : "") + " — ordering again");
-    current = next;
-    checkpoint({ status: "requoted", offer: next });
-    res = await order(current);
-  }
+for (let n = 1; n < MAX_ORDERS && (res === null || res.status === 409); n++) {
+  const refused = res === null
+    ? { error: "asks_more", current_offer: { ...current.offer, price: { ...current.offer.price, usd: askedMore }, quote_token: undefined, price_valid_until: undefined } }
+    : await res.clone().json().catch(() => null);
+  if (refused?.error !== "asks_more" && !NOT_CHARGED.test(refused?.error ?? "")) break;   // not a refusal that charged nothing
+  const next = refused.current_offer;
+  const was = current;
+  known.splice(known.indexOf(was), 1);
+  if (next?.offer_id === was.offer.offer_id && refused.catalogue_changed !== false) known.push({ q: was.q, offer: next, fresh: true });
+  console.log(`${refused.error}: not charged; ` + (known.some((c) => c.q === was.q)
+    ? `${was.q.seller.name} now asks ${next.price.usd} USDC` + (next.price_valid_until ? `, kept until ${next.price_valid_until}` : "")
+    : `${was.q.seller.name} cannot sell it now`));
+  current = cheapest();
+  if (!current) { current = was; console.error(`no offer left within --max-usd ${maxUsd}`); break; }
+  console.log(current.q === was.q ? `ordering again from ${current.q.seller.name} at ${current.offer.price.usd} USDC`
+    : `cheaper now: ${current.offer.offer_id} at ${current.offer.price.usd} USDC from ${current.q.seller.name}`
+      + (current.offer.price_valid_until ? ` (its quote holds until ${current.offer.price_valid_until})` : "") + " — ordering there");
+  checkpoint({ status: "requoted", offer: current.offer });
+  res = await order(current);
 }
+if (res === null) { console.error(`${current.q.seller.name} asks ${askedMore} USDC, more than its offer: not signed`); process.exit(1); }
 if (res.status === 402) {
   // A refused payment says why in the x402 header, not in the body.
   let why = "no reason given";
@@ -160,7 +204,7 @@ await share("delivery", d.receipt, d.receipt_signature, paidTx);
 
 // 4. Optional: the money back for the unused eSIM, and the refund receipt to the hub.
 if (flag("refund")) {
-  const base = q.order.url.replace(/\/order$/, "");
+  const base = current.q.order.url.replace(/\/order$/, "");
   const { json } = await post(`${base}/refund`, { esim_tran_no: d.esim_tran_no, status_token: d.status_token });
   if (!json?.success) { console.error(`refund refused: ${json?.error}: ${json?.message}`); process.exit(1); }
   const r = json.result;

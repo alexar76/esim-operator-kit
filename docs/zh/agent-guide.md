@@ -158,6 +158,12 @@ export async function buyEsim(orderUrl, offer) {
 如果价格合适，调用 `buyEsim(orderUrl, err.currentOffer)`。当批发商拒绝卖家按旧目录定价的订单时也一样：卖家会立即
 重新读取目录，`409 supplier_<code>` 附带 `current_offer`。如果新成本允许，您的令牌在这里也保持原价。
 
+**订单被拒与其他卖家。** 带 `current_offer` 的拒绝只是替换该卖家的报价，并不结束这次购买。如果您向多个卖家询过价，
+下单前请再比较一次：其他卖家的报价在有效期内保持原价，现在可能更便宜，而且比较不需要重新询价。下单您目前知道的最便宜的
+套餐：同一卖家的新价格，或另一卖家凭它自己的 `quote_token`。签名金额不要超过所选套餐的价格：不发 `quote_token`
+的卖家在下单时可能要价高于报价。`examples/agent-buy.mjs` 就是这样做的（总共最多四次下单），并给每个卖家各自的
+`X-Esim-Recovery` 值。
+
 **何时扣款。** 卖家验证付款、购买 eSIM，并且只在 eSIM 创建后才结算付款。被拒绝的订单不花钱。仍在准备中的订单（`503 allocation_pending`）尚未扣款；再次发送同一笔付款会取回同一张 eSIM，绝不会买第二张。结算结果不确定时返回 `settlement_pending`：请勿再次付款，请联系卖家。
 
 响应：
@@ -233,7 +239,7 @@ node examples/agent-buy.mjs https://<seller>/agents TR --key-file ~/agent-wallet
 | `--hub <url>` | 通过这个枢纽查找卖家，并跳过处于演示模式的卖家。 |
 | `--key-file <file>` | 智能体的钱包，`{"private_key": "0x…"}`。从不打印。也可以用 `AGENT_PRIVATE_KEY`。 |
 | `--min-gb`、`--days` | 行程的需求。 |
-| `--max-usd` | 单笔付款的上限，默认 1。超过这个金额，x402 客户端拒绝签名。 |
+| `--max-usd` | 单笔付款的上限，默认 1。超过这个金额，或超过所购套餐的价格，x402 客户端拒绝签名。 |
 | `--refund` | 交付后立即申请退款：用于测试。 |
 | `--no-share` | 不向枢纽报告这次购买：不会发送任何收据。 |
 

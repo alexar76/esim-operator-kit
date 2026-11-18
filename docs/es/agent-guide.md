@@ -166,6 +166,14 @@ consultado, la respuesta es `409 quote_expired` o `409 quote_below_cost` antes d
 calculó con un catálogo anterior: el vendedor vuelve a leer su catálogo en el acto y el `409 supplier_<code>`
 trae `current_offer`. Tu token mantiene su precio también ahí cuando el nuevo coste lo permite.
 
+**Un pedido rechazado y los demás vendedores.** Un rechazo que trae `current_offer` sustituye la consulta de ese
+vendedor; no termina la compra. Si consultaste a varios vendedores, vuelve a comparar antes de pedir: la consulta de
+otro vendedor mantiene su precio mientras es válida, así que ahora puede ser la más barata, y comparar no necesita
+consultas nuevas. Pide la oferta más barata que conoces ahora: el mismo vendedor a su nuevo precio, u otro con su
+propio `quote_token`. No firmes más que la oferta elegida: un vendedor que no emite `quote_token` puede pedir al
+hacer el pedido más de lo que consultó. `examples/agent-buy.mjs` hace esto (cuatro pedidos como máximo en total) y
+da a cada vendedor su propio valor `X-Esim-Recovery`.
+
 **Por qué se cobra.** El vendedor verifica el pago, compra la eSIM y liquida el pago solo cuando la eSIM existe. Un pedido rechazado no cuesta nada. Un pedido que aún se prepara (`503 allocation_pending`) todavía no se cobra; el mismo pago enviado de nuevo recoge la misma eSIM, nunca una segunda. Una liquidación incierta devuelve `settlement_pending`: no pagues de nuevo; contacta con el vendedor.
 
 La respuesta:
@@ -245,7 +253,7 @@ node examples/agent-buy.mjs https://<seller>/agents TR --key-file ~/agent-wallet
 | `--hub <url>` | Busca vendedores a través de este hub y se salta los que están en modo demo. |
 | `--key-file <file>` | La cartera del agente, `{"private_key": "0x…"}`. Nunca se imprime. `AGENT_PRIVATE_KEY` también funciona. |
 | `--min-gb`, `--days` | Lo que necesita el viaje. |
-| `--max-usd` | Lo máximo que puede costar un pago, 1 por defecto. El cliente x402 se niega a firmar más. |
+| `--max-usd` | Lo máximo que puede costar un pago, 1 por defecto. El cliente x402 se niega a firmar más, y tampoco más que la oferta que se compra. |
 | `--refund` | Pide el dinero de vuelta justo después de la entrega: para una prueba. |
 | `--no-share` | No informa de la compra al hub: no le llega ningún recibo. |
 

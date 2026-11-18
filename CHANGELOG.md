@@ -1,5 +1,29 @@
 # Changelog
 
+## 0.5.1 — 2026-11-18
+
+`@aimarket/esim-rails` 0.5.1: the example buyer in the package (`examples/agent-buy.mjs`). The node is unchanged from
+0.5.0.
+
+- **The example buyer compares again after a refused order.** Asked on DEV (2026-11-18): when a buyer gets
+  `current_offer` at a higher price, does it take it straight away or go back to the other sellers?
+  `examples/agent-buy.mjs` took it straight away (once, within `--max-usd`). Now:
+  - a refusal that charged nothing (`409 quote_expired`, `quote_below_cost`, `supplier_*`) does not end the purchase:
+    `current_offer` replaces that seller's quote, and a seller that can only say no (`offer_withdrawn`,
+    `catalogue_changed: false`) is dropped;
+  - it orders the cheapest offer it now knows, within `--max-usd`: the same seller at its new price, or another
+    seller whose quote still holds its price, with that seller's `quote_token`. No new quotes are needed. A tie goes to
+    the fresher offer; at most four orders in all;
+  - it signs no more than the offer it is buying: a seller that issues no quote tokens and asks more at the order than
+    it quoted gets no signature, and its asking price is compared like a `current_offer` (`asks_more`);
+  - each seller tried gets its own `X-Esim-Recovery` value, so no seller learns the value that recovers another
+    seller's order.
+- `rails/test/agent-buy.test.js` runs the example against two kit nodes behind a test hub: it moves to the other seller
+  when the refused seller's new price is above that seller's quote, stays when the kept price is still the cheapest,
+  signs nothing for a seller asking more than its quote, pays a lone seller's new price within the cap, and stops at the
+  cap. The node is unchanged. Kit tests 80/80.
+- Agent guide (en, es, fr, ru, zh): "A refused order and the other sellers"; the `--max-usd` row.
+
 ## 0.5.0 — 2026-11-17
 
 `@aimarket/esim-rails` 0.5.0. Builds on 0.4.0 below (published 2026-11-03). The kit's reference node has run this code

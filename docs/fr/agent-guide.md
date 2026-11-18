@@ -166,6 +166,14 @@ Il en va de même quand le grossiste refuse une commande que le vendeur a chiffr
 vendeur relit aussitôt son catalogue et le `409 supplier_<code>` porte `current_offer`. Votre jeton y garde aussi
 son prix quand le nouveau coût le permet.
 
+**Une commande refusée et les autres vendeurs.** Un refus qui apporte `current_offer` remplace l'offre de ce
+vendeur ; il ne met pas fin à l'achat. Si vous avez interrogé plusieurs vendeurs, comparez de nouveau avant de
+commander : l'offre d'un autre vendeur garde son prix tant qu'elle est valable, elle peut donc être maintenant la
+moins chère, et comparer ne demande pas de nouvelles offres. Commandez l'offre la moins chère que vous connaissez :
+le même vendeur à son nouveau prix, ou l'autre avec son propre `quote_token`. Ne signez pas plus que l'offre choisie :
+un vendeur qui n'émet pas de `quote_token` peut demander à la commande plus que son offre. `examples/agent-buy.mjs`
+fait ainsi (quatre commandes au plus en tout) et donne à chaque vendeur sa propre valeur `X-Esim-Recovery`.
+
 **Ce qui est facturé.** Le vendeur vérifie le paiement, achète l'eSIM et ne règle le paiement qu'une fois l'eSIM créée. Une commande refusée ne coûte rien. Une commande encore en préparation (`503 allocation_pending`) n'est pas encore facturée ; le même paiement renvoyé récupère la même eSIM, jamais une seconde. Un règlement incertain renvoie `settlement_pending` : ne payez pas à nouveau ; contactez le vendeur.
 
 La réponse :
@@ -245,7 +253,7 @@ node examples/agent-buy.mjs https://<seller>/agents TR --key-file ~/agent-wallet
 | `--hub <url>` | Trouve les vendeurs via ce hub et ignore ceux en mode démo. |
 | `--key-file <file>` | Le portefeuille de l'agent, `{"private_key": "0x…"}`. Jamais affiché. `AGENT_PRIVATE_KEY` fonctionne aussi. |
 | `--min-gb`, `--days` | Les besoins du voyage. |
-| `--max-usd` | Le maximum qu'un paiement peut coûter, 1 par défaut. Le client x402 refuse de signer davantage. |
+| `--max-usd` | Le maximum qu'un paiement peut coûter, 1 par défaut. Le client x402 refuse de signer davantage, et jamais plus que l'offre achetée. |
 | `--refund` | Redemande l'argent juste après la livraison : pour un test. |
 | `--no-share` | Ne signale pas l'achat au hub : aucun reçu ne lui est envoyé. |
 
