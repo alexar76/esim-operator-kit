@@ -54,14 +54,16 @@ Con Japón (`JP`), un mínimo de 1 GB y 7 días, `search_plans` devolvió el pla
 
 Por separado, Tutu emitió manualmente una eSIM de prueba de 0,00 USD. Confirmamos la recepción del
 correo de entrega y del recibo. El diagnóstico automático indicó que la eSIM seguía sin instalar,
-sin conexión a la red y con 0 MB de consumo. Sigue pendiente la confirmación de la cancelación por
-parte del proveedor. La prueba quedó limitada a un pedido sin cargo, por lo que el reembolso
-monetario sigue sin probarse.
+sin conexión a la red y con 0 MB de consumo. El 24 de noviembre de 2026, Tutu confirmó que
+su proveedor había cancelado el perfil antes de la instalación y que el pedido tenía el
+estado `refunded`. El cargo fue de 0,00 USD. El piloto verificó la cancelación de un perfil
+sin instalar. Queda por probar el reembolso de un pago.
 
-El MCP actual dirige al comprador a la página de pago de Tutu. Para comprar a través de la
-federación, Tutu tendría que operar un nodo vendedor AIMarket separado en producción, publicar su
-información de descubrimiento firmada y ofrecer `esim.quote@v1`, `esim.order@v1` y `esim.status@v1`,
-con pago en USDC en Base mediante x402. El Hub revisaría y admitiría el nodo antes de listar sus ofertas.
+Tutu aceptó un piloto de cotizaciones en AIMarket Hub para `JP-1-7`, con el pago en el sitio
+de Tutu. El piloto en el Hub está en preparación. Tutu volverá a evaluar x402 cuando la
+oferta genere los primeros pedidos reales. Para tramitar pedidos a través de la federación
+AIMarket se requeriría un nodo vendedor admitido, con información de descubrimiento firmada,
+`esim.quote@v1`, `esim.order@v1` y `esim.status@v1`, y pago en USDC en Base mediante x402.
 [Guía del operador, sección 9](operator-guide.md#9-agentes-y-federación)
 
 ## 2. Proveedores

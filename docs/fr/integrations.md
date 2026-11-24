@@ -55,14 +55,17 @@ arrêté avant de valider le paiement. [MCP de Tutu eSIM](https://tutuesim.com/e
 Tutu a émis manuellement une eSIM de test à 0,00 USD en dehors du parcours de paiement. Nous avons confirmé
 la réception du courriel de livraison et du reçu. Le diagnostic automatique indiquait que l’eSIM
 était toujours en attente d’installation, sans connexion au réseau et avec une consommation de
-0 Mo. La confirmation de l’annulation par le fournisseur est encore attendue. Cet essai portait
-sur une commande gratuite. Le remboursement d’un paiement reste à vérifier.
+0 Mo. Le 24 novembre 2026, Tutu a confirmé que son fournisseur avait annulé le profil
+avant son installation et que la commande affichait le statut `refunded`. Le montant
+débité était de 0,00 USD. L’essai a vérifié l’annulation d’un profil non installé.
+Le remboursement d’un paiement reste à vérifier.
 
-Le MCP actuel dirige l’acheteur vers la page de paiement de Tutu. Pour permettre un achat via la
-fédération, Tutu devrait exploiter un nœud vendeur AIMarket distinct en production, publier ses
-informations de découverte signées et proposer `esim.quote@v1`, `esim.order@v1` et `esim.status@v1`,
-avec paiement en USDC sur Base via x402. Le Hub vérifierait et admettrait le nœud avant de référencer
-ses offres. [Guide de l’opérateur, section 9](operator-guide.md#9-agents-et-fédération)
+Tutu a accepté un pilote de devis dans AIMarket Hub pour `JP-1-7`, avec paiement sur le
+site de Tutu. Le pilote dans le Hub est en préparation. Tutu prévoit de réexaminer x402
+après les premières commandes réelles issues du catalogue. Pour passer commande via la
+fédération AIMarket, il faudrait un nœud vendeur admis avec des informations de découverte
+signées, `esim.quote@v1`, `esim.order@v1`, `esim.status@v1` et un paiement en USDC sur
+Base via x402. [Guide de l’opérateur, section 9](operator-guide.md#9-agents-et-fédération)
 
 ## 2. Fournisseurs
 

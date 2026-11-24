@@ -53,13 +53,17 @@ USD. We stopped at the payment page. [Tutu’s MCP connector](https://tutuesim.c
 
 Tutu manually issued a separate test eSIM. Its delivery email and receipt arrived,
 and the receipt total was USD 0.00. Tutu’s automatic status check showed no installation,
-no connection to a network and 0 MB used. Confirmation of cancellation with the supplier
-is pending. The test involved no payment or monetary refund.
+no connection to a network and 0 MB used. On 2026-11-24 Tutu confirmed that its supplier
+canceled the profile while it was still uninstalled and that the order status was
+`refunded`. The charge was USD 0.00, so the pilot verified cancellation of an
+uninstalled profile. A monetary refund remains untested.
 
-Tutu’s connector currently returns a link to its own checkout. To sell through AIMarket,
-Tutu would need a live seller node with signed discovery, `esim.quote@v1`, `esim.order@v1`,
-`esim.status@v1` and x402 settlement in USDC on Base. A Hub checks and admits the node before
-listing its offers. [Operator guide, section 9](operator-guide.md#9-agents-and-the-federation)
+Tutu agreed to a quote pilot for `JP-1-7` in AIMarket Hub with checkout on Tutu’s site.
+The Hub pilot is in preparation. Tutu plans to revisit x402 after it sees real orders
+from the listing. Orders placed through the AIMarket federation would require an
+admitted seller node with signed discovery, `esim.quote@v1`, `esim.order@v1`,
+`esim.status@v1` and x402 settlement in USDC on Base.
+[Operator guide, section 9](operator-guide.md#9-agents-and-the-federation)
 
 ## 2. Suppliers
 
