@@ -107,6 +107,7 @@ flowchart LR
 | 其他任何来源：SDK 的供应商接口 | ✅ | 你自己的应用或店铺：智能体 API | ✅ |
 
 每项的分步配置：[集成](docs/zh/integrations.md)。
+第 1.1 节记录了 Tutu eSIM 的 MCP 结账试点。
 
 ## 智能体如何购买
 

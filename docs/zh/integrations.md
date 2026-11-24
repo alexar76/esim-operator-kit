@@ -42,6 +42,14 @@ flowchart LR
 在通过 🟡 集成销售之前，先加载你的目录（`scripts/catalog.mjs`），并做一次测试订单后取消（运营者指南第 10 节）。
 把你的发现告诉我们：在 GitHub 上提一个 issue，就能让下一位运营者看到 ✅。
 
+### 1.1 Tutu eSIM
+
+2026 年 11 月 24 日，我们通过 Tutu eSIM 的公开只读 MCP 调用 `search_plans`，查询日本（JP）至少 1 GB、有效期至少 7 天的套餐。返回的 `JP-1-7` 报价为 3.49 美元。打开 `buy_url` 后，结账页显示的是同一套餐，默认显示 3.20 欧元，切换到美元后显示 3.49 美元。我们未提交付款。[Tutu eSIM MCP 文档](https://tutuesim.com/en/mcp/)
+
+Tutu 另行手动签发了一张 0.00 美元的测试 eSIM。我们确认收到了交付邮件和收据。自动诊断显示 eSIM 尚未安装、未连接网络，数据用量为 0 MB。供应商尚未确认取消。这次试点未测试资金退款。
+
+目前，Tutu 的 MCP 提供结账链接。要在 AIMarket 联邦中销售，运营者需另行运行可用的 AIMarket 卖家节点，发布签名的服务发现信息，提供 `esim.quote@v1`、`esim.order@v1` 和 `esim.status@v1`，并通过 x402 在 Base 网络上收取 USDC。AIMarket Hub 审查并接纳节点后才会列出其报价。[运营者指南第 9 节](operator-guide.md#9-智能体与联邦)
+
 ## 2. 供应商
 
 ### 2.1 eSIM Access

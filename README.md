@@ -113,6 +113,7 @@ those direct sales.
 | Anything else: the SDK's supplier interface | ✅ | Your own app or storefront: the agent API | ✅ |
 
 Setup for each, step by step: [Integrations](docs/en/integrations.md).
+Section 1.1 covers the MCP checkout pilot with Tutu eSIM.
 
 ## How an agent buys
 

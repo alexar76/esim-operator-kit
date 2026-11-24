@@ -112,6 +112,7 @@ prennent aucune commission sur ces ventes directes.
 | Tout le reste : l'interface fournisseur du SDK | ✅ | Votre app ou votre boutique : l'API pour agents | ✅ |
 
 Configuration de chacune, pas à pas : [Intégrations](docs/fr/integrations.md).
+La section 1.1 décrit le pilote de commande via le MCP de Tutu eSIM.
 
 ## Comment un agent achète
 

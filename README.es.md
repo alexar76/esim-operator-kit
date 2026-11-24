@@ -111,6 +111,7 @@ no cobran comisión por esas ventas directas.
 | Cualquier otro: la interfaz de proveedor del SDK | ✅ | Tu propia app o tienda: la API para agentes | ✅ |
 
 Configuración de cada una, paso a paso: [Integraciones](docs/es/integrations.md).
+La sección 1.1 describe el piloto de compra con el MCP de Tutu eSIM.
 
 ## Cómo compra un agente
 

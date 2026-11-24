@@ -44,6 +44,26 @@ Avant de vendre via une intégration 🟡, chargez votre catalogue (`scripts/cat
 commande test que vous annulez (guide de l'opérateur, section 10). Dites-nous ce que vous trouvez :
 une issue sur GitHub la fait passer en ✅ pour l'opérateur suivant.
 
+### 1.1 Tutu eSIM via MCP
+
+Le 24 novembre 2026, nous avons testé le MCP public en lecture seule de Tutu eSIM.
+Pour le Japon (`JP`), avec au moins 1 Go et 7 jours, `search_plans` a renvoyé le
+forfait `JP-1-7` à 3,49 USD. Son `buy_url` a ouvert la page de paiement du même forfait. Le
+navigateur a affiché 3,20 EUR par défaut, puis 3,49 USD après sélection du dollar. L’essai s’est
+arrêté avant de valider le paiement. [MCP de Tutu eSIM](https://tutuesim.com/en/mcp/)
+
+Tutu a émis manuellement une eSIM de test à 0,00 USD en dehors du parcours de paiement. Nous avons confirmé
+la réception du courriel de livraison et du reçu. Le diagnostic automatique indiquait que l’eSIM
+était toujours en attente d’installation, sans connexion au réseau et avec une consommation de
+0 Mo. La confirmation de l’annulation par le fournisseur est encore attendue. Cet essai portait
+sur une commande gratuite. Le remboursement d’un paiement reste à vérifier.
+
+Le MCP actuel dirige l’acheteur vers la page de paiement de Tutu. Pour permettre un achat via la
+fédération, Tutu devrait exploiter un nœud vendeur AIMarket distinct en production, publier ses
+informations de découverte signées et proposer `esim.quote@v1`, `esim.order@v1` et `esim.status@v1`,
+avec paiement en USDC sur Base via x402. Le Hub vérifierait et admettrait le nœud avant de référencer
+ses offres. [Guide de l’opérateur, section 9](operator-guide.md#9-agents-et-fédération)
+
 ## 2. Fournisseurs
 
 ### 2.1 eSIM Access

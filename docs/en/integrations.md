@@ -44,6 +44,23 @@ Before selling through a 🟡 integration, load your catalogue (`scripts/catalog
 test order you cancel (operator guide, section 10). Tell us what you find: an issue on GitHub makes
 it ✅ for the next operator.
 
+### 1.1 Tutu eSIM checkout pilot
+
+On 2026-11-24 we queried Tutu’s public read-only MCP connector with `search_plans`
+for Japan (`JP`), at least 1 GB and 7 days. It returned `JP-1-7` at USD 3.49. The `buy_url` opened checkout for
+the same plan. The browser showed EUR 3.20 by default and USD 3.49 after we selected
+USD. We stopped at the payment page. [Tutu’s MCP connector](https://tutuesim.com/en/mcp/)
+
+Tutu manually issued a separate test eSIM. Its delivery email and receipt arrived,
+and the receipt total was USD 0.00. Tutu’s automatic status check showed no installation,
+no connection to a network and 0 MB used. Confirmation of cancellation with the supplier
+is pending. The test involved no payment or monetary refund.
+
+Tutu’s connector currently returns a link to its own checkout. To sell through AIMarket,
+Tutu would need a live seller node with signed discovery, `esim.quote@v1`, `esim.order@v1`,
+`esim.status@v1` and x402 settlement in USDC on Base. A Hub checks and admits the node before
+listing its offers. [Operator guide, section 9](operator-guide.md#9-agents-and-the-federation)
+
 ## 2. Suppliers
 
 ### 2.1 eSIM Access
