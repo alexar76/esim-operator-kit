@@ -48,7 +48,13 @@ flowchart LR
 
 Tutu 另行手动签发了一张 0.00 美元的测试 eSIM。我们确认收到了交付邮件和收据。自动诊断显示 eSIM 尚未安装、未连接网络，数据用量为 0 MB。2026 年 11 月 24 日，Tutu 确认供应商已在安装前取消该配置文件，订单状态为 `refunded`。实际扣款为 0.00 美元。这次试点验证了未安装配置文件的取消，实际付款的退款流程仍有待测试。
 
-Tutu 同意为 `JP-1-7` 在 AIMarket Hub 开展报价试点，由买家在 Tutu 网站结账。Hub 试点正在筹备中。Tutu 计划在目录带来首批真实订单后重新评估 x402。若要通过 AIMarket 联邦下单，则需要经 Hub 审核接纳的卖家节点，发布签名的服务发现信息，提供 `esim.quote@v1`、`esim.order@v1` 和 `esim.status@v1`，并通过 x402 在 Base 网络上收取 USDC。[运营者指南第 9 节](operator-guide.md#9-智能体与联邦)
+Tutu 同意为 `JP-1-7` 在 AIMarket Hub 开展报价试点，由买家在 Tutu 网站结账。Hub 试点正在筹备中。Tutu 确认，只要套餐仍在销售，套餐 ID 就会保持不变。Hub 每次收到报价请求时都会调用 `search_plans` 获取当前价格。据 Tutu 介绍，如果客户首次通过带有 `src=aimarket` 的链接访问，访问和完成的订单都会归因于 AIMarket。
+
+再次调用 `search_plans` 时，返回了带 `src=aimarket` 的链接以及 `notes` 和 `refund_policy_url` 字段。两次响应的说明都是英文，退款政策链接分别对应请求中的英文和俄文。[Tutu 退款政策（英文）](https://tutuesim.com/en/refund)
+
+Tutu 还确认，对于取消或退款请求，客服自动回复只用客户的语言提供状态。这个客服流程仍有待再次独立验证。
+
+Tutu 计划在目录带来首批真实订单后重新评估 x402。若要通过 AIMarket 联邦下单，则需要经 Hub 审核接纳的卖家节点，发布签名的服务发现信息，提供 `esim.quote@v1`、`esim.order@v1` 和 `esim.status@v1`，并通过 x402 在 Base 网络上收取 USDC。[运营者指南第 9 节](operator-guide.md#9-智能体与联邦)
 
 ## 2. 供应商
 

@@ -59,7 +59,19 @@ canceled the profile while it was still uninstalled and that the order status wa
 uninstalled profile. A monetary refund remains untested.
 
 Tutu agreed to a quote pilot for `JP-1-7` in AIMarket Hub with checkout on Tutu’s site.
-The Hub pilot is in preparation. Tutu plans to revisit x402 after it sees real orders
+The Hub pilot is in preparation. Tutu confirmed that the plan ID stays stable while the plan is
+on sale. The Hub calls `search_plans` on each quote request for the current price. According to Tutu,
+`src=aimarket` records AIMarket as the source for visits and completed orders when it is the customer’s
+first touch.
+
+A follow-up `search_plans` check returned the checkout link with `src=aimarket`, along with `notes`
+and `refund_policy_url`. The notes were in English in both responses. The refund link matched the
+requested language in English and Russian. [Tutu’s refund policy](https://tutuesim.com/en/refund)
+
+Tutu also confirmed that its automatic support reply to cancellation or refund requests reports
+only the status in the customer’s language. A fresh independent check of that support flow is pending.
+
+Tutu plans to revisit x402 after it sees real orders
 from the listing. Orders placed through the AIMarket federation would require an
 admitted seller node with signed discovery, `esim.quote@v1`, `esim.order@v1`,
 `esim.status@v1` and x402 settlement in USDC on Base.

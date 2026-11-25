@@ -60,7 +60,21 @@ estado `refunded`. El cargo fue de 0,00 USD. El piloto verificó la cancelación
 sin instalar. Queda por probar el reembolso de un pago.
 
 Tutu aceptó un piloto de cotizaciones en AIMarket Hub para `JP-1-7`, con el pago en el sitio
-de Tutu. El piloto en el Hub está en preparación. Tutu volverá a evaluar x402 cuando la
+de Tutu. El piloto en el Hub está en preparación. Tutu confirmó que el identificador se mantiene
+mientras el plan esté a la venta. El Hub llama a `search_plans` en cada solicitud de cotización
+para obtener el precio vigente. Según Tutu, si el cliente llega por primera vez mediante un enlace
+con `src=aimarket`, la visita y el pedido completado se atribuyen a AIMarket.
+
+En una segunda comprobación, `search_plans` devolvió el enlace con `src=aimarket` y los campos
+`notes` y `refund_policy_url`. Las notas estaban en inglés en ambas respuestas. El enlace de
+reembolso correspondía al idioma solicitado en inglés y en ruso.
+[Política de reembolsos de Tutu en inglés](https://tutuesim.com/en/refund)
+
+Tutu también confirmó que la respuesta automática de soporte a las solicitudes de cancelación o
+reembolso solo informa del estado en el idioma del cliente. Queda pendiente repetir esa comprobación
+de forma independiente.
+
+Tutu volverá a evaluar x402 cuando la
 oferta genere los primeros pedidos reales. Para tramitar pedidos a través de la federación
 AIMarket se requeriría un nodo vendedor admitido, con información de descubrimiento firmada,
 `esim.quote@v1`, `esim.order@v1` y `esim.status@v1`, y pago en USDC en Base mediante x402.

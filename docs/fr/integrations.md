@@ -61,7 +61,21 @@ débité était de 0,00 USD. L’essai a vérifié l’annulation d’un profil 
 Le remboursement d’un paiement reste à vérifier.
 
 Tutu a accepté un pilote de devis dans AIMarket Hub pour `JP-1-7`, avec paiement sur le
-site de Tutu. Le pilote dans le Hub est en préparation. Tutu prévoit de réexaminer x402
+site de Tutu. Le pilote dans le Hub est en préparation. Tutu a confirmé que l’identifiant reste
+stable tant que le forfait est en vente. Pour chaque demande de devis, le Hub appelle `search_plans`
+pour obtenir le tarif en vigueur. Selon Tutu, si le premier accès du client se fait via un lien
+contenant `src=aimarket`, la visite et la commande finalisée sont attribuées à AIMarket.
+
+Lors d’une nouvelle vérification, `search_plans` a renvoyé le lien avec `src=aimarket` et les
+champs `notes` et `refund_policy_url`. Les notes étaient en anglais dans les deux réponses.
+Le lien vers les conditions de remboursement correspondait à la langue demandée, en anglais
+comme en russe. [Conditions de remboursement de Tutu en anglais](https://tutuesim.com/en/refund)
+
+Tutu a également confirmé que la réponse automatique du support aux demandes d’annulation ou de
+remboursement indique uniquement le statut, dans la langue du client. Une nouvelle vérification
+indépendante de ce parcours reste à faire.
+
+Tutu prévoit de réexaminer x402
 après les premières commandes réelles issues du catalogue. Pour passer commande via la
 fédération AIMarket, il faudrait un nœud vendeur admis avec des informations de découverte
 signées, `esim.quote@v1`, `esim.order@v1`, `esim.status@v1` et un paiement en USDC sur
