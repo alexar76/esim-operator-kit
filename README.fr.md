@@ -151,7 +151,7 @@ flowchart TB
   Q -->|"déjà votre propre API pour agents,<br/>dans n'importe quel langage"| D["D · Le contrat<br/>esim.*@v1 + test de conformité"]
   B --> R["Le kit : nœud pour agents, nœud de fédération,<br/>paiements, boutique en option"]
   C --> R2["Votre service, avec createNode()"]
-  D --> R3["esim-rails check https://vous/agents"]
+  D --> R3["Vérification autonome du contrat"]
   A2 --> R
   R --> F["aimarket node knock → référencé sur les hubs"]
   R2 --> F
@@ -163,7 +163,7 @@ flowchart TB
 | **A** kit entier | rien : `./onboard.sh` | tout ce qui suit, sur eSIM Access, Airalo ou eSIM Go |
 | **B** fournisseur HTTP | `GET /catalog`, `POST /orders`, `GET /profiles`, `POST /profiles/{id}/cancel`, `GET /balance` ([spécification](rails/spec/supplier-http.md)) | nœud pour agents, x402, dix réseaux de paiement, boutique, fédération, webhooks |
 | **C** SDK | un objet fournisseur dans votre code Node.js | `createNode()` avec signature, x402, commandes idempotentes, schémas |
-| **D** contrat | `esim.quote@v1`, `esim.order@v1`, `esim.status@v1` dans votre propre stack | schémas JSON et `esim-rails check`, puis le nœud de fédération |
+| **D** contrat | `esim.quote@v1`, `esim.order@v1`, `esim.status@v1` dans votre propre stack | schémas JSON et [vérification autonome](rails/spec/conformance.md), puis le nœud de fédération |
 
 Toutes les voies finissent de la même façon : votre nœud s'annonce à un hub AIMarket, passe son
 contrôle d'admission, et les agents qui cherchent dans la fédération voient vos offres. Les

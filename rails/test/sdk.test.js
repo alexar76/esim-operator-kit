@@ -124,11 +124,25 @@ test("the conformance check passes the kit's own node and names what a broken on
   const t = await stack();
   try {
     // The listing names the node's public order URL; here it is served on this machine.
-    const local = (url, init) => fetch(String(url).replace("https://op.example/agents", t.base), init);
-    const results = await checkSeller(t.base, { country: "FR", fetchImpl: local });
+    const local = async (url, init) => {
+      const endpoint = String(url).replace("https://op.example/agents", t.base);
+      assert.ok(!endpoint.endsWith("/refund"), "conformance does not submit a refund");
+      const response = await fetch(endpoint.replace(/\/private-status$/, "/status"), init);
+      if (!endpoint.endsWith("/listing.json")) return response;
+      const listing = await response.json();
+      listing.status.url = "https://op.example/agents/private-status";
+      return Response.json(listing, { status: response.status });
+    };
+    const probes = [];
+    const results = await checkSeller(t.base, { country: "FR", fetchImpl: (url, init) => {
+      probes.push(String(url));
+      return local(url, init);
+    } });
     const failed = results.filter((r) => !r.ok);
     // The fake paywall answers 402 without x402 terms: the check must say so, and nothing else.
     assert.deepEqual(failed.map((r) => r.name), ["x402 terms"]);
+    assert.ok(probes.includes("https://op.example/agents/private-status"));
+    assert.ok(results.find((r) => r.name === "refund listing" && r.ok && !r.warn));
     for (const name of ["quoted price kept", "a changed quote_token is a 400 before any price"]) {
       assert.ok(results.find((r) => r.name === name)?.ok, name);
     }

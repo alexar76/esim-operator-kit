@@ -5,7 +5,7 @@
 //
 // It calls only free routes and asks the paid one for its price; it never pays.
 import { createPublicKey, verify } from "node:crypto";
-import { boundCanonical } from "./node.js";
+import { boundCanonical } from "./canonical.js";
 import { validate } from "./schema.js";
 
 const pubkeyFromB64 = (b64) => createPublicKey({
@@ -69,9 +69,16 @@ export async function checkSeller(base, { country = "FR", fetchImpl = globalThis
     if (res.status === 400 && json?.success === false) ok("bad input is a 400"); else fail("bad input is a 400", `HTTP ${res.status}`);
   } catch (err) { fail("bad input is a 400", err.message); }
   try {
-    const { res, json } = await call("/status", { esim_tran_no: "000000000000", status_token: "x".repeat(43) });
+    const { res, json } = await call(listing?.status?.url || "/status",
+      { esim_tran_no: "000000000000", status_token: "x".repeat(43) });
     if (res.status === 404 && json?.error === "not_found") ok("unknown eSIM is a 404 not_found"); else fail("unknown eSIM is a 404 not_found", `HTTP ${res.status}`);
   } catch (err) { fail("unknown eSIM is a 404 not_found", err.message); }
+
+  const refund = listing?.refund;
+  if (!refund) warn("refund listing", "the seller advertises no direct refund route");
+  else if (!refund.url || refund.method !== "POST" || !refund.body?.esim_tran_no || !refund.body?.status_token) {
+    fail("refund listing", "needs a POST URL and a body with esim_tran_no and status_token");
+  } else ok("refund listing", "direct refund route advertised; no refund submitted");
 
   // 4. The order: unknown offers refused before a price; a known one asks for its price over x402.
   const orderUrl = listing?.order?.url;

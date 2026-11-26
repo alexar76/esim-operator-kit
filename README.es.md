@@ -150,7 +150,7 @@ flowchart TB
   Q -->|"ya tienes tu propia API para agentes,<br/>en cualquier lenguaje"| D["D · El contrato<br/>esim.*@v1 + prueba de conformidad"]
   B --> R["El kit: nodo para agentes, nodo de federación,<br/>pagos, tienda opcional"]
   C --> R2["Tu servicio, con createNode()"]
-  D --> R3["esim-rails check https://tu/agents"]
+  D --> R3["Verificación autónoma del contrato"]
   A2 --> R
   R --> F["aimarket node knock → listado en los hubs"]
   R2 --> F
@@ -162,7 +162,7 @@ flowchart TB
 | **A** kit completo | nada: `./onboard.sh` | todo lo de abajo, sobre eSIM Access, Airalo o eSIM Go |
 | **B** proveedor HTTP | `GET /catalog`, `POST /orders`, `GET /profiles`, `POST /profiles/{id}/cancel`, `GET /balance` ([especificación](rails/spec/supplier-http.md)) | nodo para agentes, x402, diez redes de pago, tienda, federación, webhooks |
 | **C** SDK | un objeto proveedor en tu código Node.js | `createNode()` con firma, x402, pedidos idempotentes, esquemas |
-| **D** contrato | `esim.quote@v1`, `esim.order@v1`, `esim.status@v1` en tu propio stack | esquemas JSON y `esim-rails check`, luego el nodo de federación |
+| **D** contrato | `esim.quote@v1`, `esim.order@v1`, `esim.status@v1` en tu propio stack | esquemas JSON y [verificación autónoma](rails/spec/conformance.md), luego el nodo de federación |
 
 Todos los caminos terminan igual: tu nodo se anuncia a un hub de AIMarket, pasa su comprobación de
 admisión y los agentes que buscan en la federación ven tus ofertas. Los eventos de pedidos y pagos

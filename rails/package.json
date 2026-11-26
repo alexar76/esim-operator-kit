@@ -54,6 +54,7 @@
     "start": "node src/server.js",
     "catalog": "node scripts/catalog.mjs",
     "check": "node bin/esim-rails.mjs check",
+    "pack:check": "node scripts/pack-check.mjs",
     "build": "node --check src/index.js && node bin/esim-rails.mjs schemas > /dev/null"
   },
   "dependencies": {

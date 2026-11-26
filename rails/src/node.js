@@ -23,6 +23,9 @@ import { atPrice, centsOf, issueQuote, priceForQuote, quoteKey, readQuote, usdOf
 import { asSupplier } from "./supplier.js";
 import { fulfil, status, transactionIdFor, refund, release } from "./order.js";
 import { usdcUnits } from "./refund.js";
+import { boundCanonical, canonicalJson } from "./canonical.js";
+
+export { boundCanonical, canonicalJson } from "./canonical.js";
 
 /** Why an order that brought a quote_token is not sold at either price (409, before any payment). */
 const QUOTE_REFUSALS = {
@@ -31,21 +34,6 @@ const QUOTE_REFUSALS = {
 };
 
 export const CAPABILITIES = { quote: "esim.quote@v1", order: "esim.order@v1", status: "esim.status@v1" };
-
-/** JSON as Python's json.dumps(sort_keys=True, separators=(",", ":"), ensure_ascii=False) writes it. */
-export function canonicalJson(value) {
-  if (Array.isArray(value)) return `[${value.map(canonicalJson).join(",")}]`;
-  if (value && typeof value === "object") {
-    return `{${Object.keys(value).sort().map((k) => `${JSON.stringify(k)}:${canonicalJson(value[k])}`).join(",")}}`;
-  }
-  return JSON.stringify(value ?? null);
-}
-
-/** The bytes a hub checks a provider's answer against (aimarket_hub.supply_security._bound_response_canonical). */
-export function boundCanonical(capabilityId, productId, input, result) {
-  const inputSha = createHash("sha256").update(canonicalJson(input || {}), "utf8").digest("hex");
-  return canonicalJson({ capability_id: capabilityId || "", product_id: productId || "", input_sha256: inputSha, result });
-}
 
 export function ed25519Signer(pem) {
   const key = pem ? createPrivateKey(pem) : generateKeyPairSync("ed25519").privateKey;

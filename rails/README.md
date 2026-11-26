@@ -73,6 +73,8 @@ first start). Without `PAY_TO` and `CDP_KEY_FILE` the node quotes but takes no o
 
 ## Connecting as a seller
 
+If you already run a seller API, use the [standalone conformance checker](spec/conformance.md). It requires Node.js 20 or newer and can be shared as an offline npm archive.
+
 The kit's `docker-compose.yml` runs this node behind Caddy at `https://<domain>/agents/`, beside the
 storefront and the federation node. The [operator guide](https://esim.modelmarket.dev/kit/operator) covers the
 wholesale account ($50 first top-up), the keys, the CDP key for x402, `node.toml` and the test order.

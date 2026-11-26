@@ -152,7 +152,7 @@ flowchart TB
   Q -->|"your own agent API already,<br/>in any language"| D["D · The contract<br/>esim.*@v1 + conformance check"]
   B --> R["The kit: agent node, federation node,<br/>payments, optional storefront"]
   C --> R2["Your service, with createNode()"]
-  D --> R3["esim-rails check https://you/agents"]
+  D --> R3["Standalone conformance check"]
   A2 --> R
   R --> F["aimarket node knock → listed on hubs"]
   R2 --> F
@@ -164,7 +164,7 @@ flowchart TB
 | **A** whole kit | nothing: `./onboard.sh` | everything below, on eSIM Access, Airalo or eSIM Go |
 | **B** HTTP supplier | `GET /catalog`, `POST /orders`, `GET /profiles`, `POST /profiles/{id}/cancel`, `GET /balance` ([spec](rails/spec/supplier-http.md)) | agent node, x402, ten payment networks, storefront, federation, webhooks |
 | **C** SDK | a supplier object in your Node.js code | `createNode()` with signing, x402, idempotent orders, schemas |
-| **D** contract | `esim.quote@v1`, `esim.order@v1`, `esim.status@v1` in your own stack | JSON Schemas and `esim-rails check`, then the federation node |
+| **D** contract | `esim.quote@v1`, `esim.order@v1`, `esim.status@v1` in your own stack | JSON Schemas and a [standalone conformance check](rails/spec/conformance.md), then the federation node |
 
 Every path ends the same way: your node announces itself to an AIMarket hub, passes its admission
 check, and agents searching the federation see your offers. Order and payment events reach your CRM,

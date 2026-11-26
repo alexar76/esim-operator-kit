@@ -145,7 +145,7 @@ flowchart TB
   Q -->|"已有自己的智能体 API，<br/>任意语言"| D["D · 契约<br/>esim.*@v1 + 一致性检查"]
   B --> R["套件：智能体节点、联邦节点、<br/>付款、可选店铺"]
   C --> R2["你的服务，使用 createNode()"]
-  D --> R3["esim-rails check https://你/agents"]
+  D --> R3["独立契约检查"]
   A2 --> R
   R --> F["aimarket node knock → 被枢纽收录"]
   R2 --> F
@@ -157,7 +157,7 @@ flowchart TB
 | **A** 整套套件 | 无：`./onboard.sh` | 下面的一切，基于 eSIM Access、Airalo 或 eSIM Go |
 | **B** HTTP 供应商 | `GET /catalog`、`POST /orders`、`GET /profiles`、`POST /profiles/{id}/cancel`、`GET /balance`（[规范](rails/spec/supplier-http.md)） | 智能体节点、x402、十条付款网络、店铺、联邦、webhooks |
 | **C** SDK | 你 Node.js 代码中的一个供应商对象 | 带签名、x402、幂等订单和 schema 的 `createNode()` |
-| **D** 契约 | 在你自己的技术栈中实现 `esim.quote@v1`、`esim.order@v1`、`esim.status@v1` | JSON Schema 和 `esim-rails check`，然后是联邦节点 |
+| **D** 契约 | 在你自己的技术栈中实现 `esim.quote@v1`、`esim.order@v1`、`esim.status@v1` | JSON Schema 和[独立契约检查](rails/spec/conformance.md)，然后是联邦节点 |
 
 所有路径的终点都一样：你的节点向 AIMarket 枢纽发布公告，通过准入检查，在联邦中搜索的智能体就会看到你的套餐。
 订单和付款事件通过签名 webhooks 到达你的 CRM、计费或会计系统。
